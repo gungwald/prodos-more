@@ -88,7 +88,7 @@ COPY_BYTE   mac
 
 
 mainProgram
-            org $800
+            org $8000
 
             lda #<fileName
             sta oPathPtr
