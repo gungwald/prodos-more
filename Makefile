@@ -37,7 +37,7 @@ DSK=$(PGM).dsk
 
 $(DSK): $(PGM)
 	$(COPY) $(BASE_DSK) $(DSK)
-	$(AC) -p $(DSK) $(PGM) BIN 0x08000 < $(PGM)
+	$(AC) -p $(DSK) $(PGM) BIN 0x8000 < $(PGM)
 
 $(PGM): $(SRC) Makefile
 	merlin32 --verbose $(SRC)

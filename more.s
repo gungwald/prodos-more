@@ -24,11 +24,14 @@ MLI     equ $bf00
 
 * ProDOS system call command codes
 OPEN    equ $c8
+READ    equ $ca
 CLOSE   equ $cc
 
 * Constants
+EOF     equ $4c     ; End of file
 ADDR    equ $06
 MAX_EC  equ $5a     ; The largest error code
+CR      equ $0d     ; Carriage return
 
 
 WRITE_CHAR  mac
@@ -86,6 +89,10 @@ COPY_BYTE   mac
             sta ]2
             eom
 
+* Starting at $9000 because:
+* $800 overwrites Applesoft
+* $803 is where Applesoft programs start
+* $2000 is where the current .SYSTEM program is loaded
 
 mainProgram
             org $8000
@@ -95,11 +102,34 @@ mainProgram
             lda #>fileName
             sta oPathPtr+1
 
-            jsr MLI
+openFile    jsr MLI
             db  OPEN
             da  openParams
             bne openErrorHandler
-            pmc COPY_BYTE,fileNum;closeNum
+
+readFile    pmc COPY_BYTE,fileNum;readNum
+readNext    jsr MLI
+            db  READ
+            da  readParams
+            cmp #EOF
+            beq closeFile
+            cmp #0
+            bne readErrorHandler
+
+writeScreen 
+            ldy #0
+            sty lineCount
+            sty charCount
+nextChar    lda readIoBuf,y
+            jsr COUT
+            cmp $0d
+            bne continue
+            inc lineCount
+continue    inc charCount
+            iny
+            jmp nextChar
+
+closeFile   pmc COPY_BYTE,fileNum;closeNum
             jsr MLI
             db  CLOSE
             dw  closeParams
@@ -108,6 +138,10 @@ mainProgram
 openErrorHandler
             sta errorCode
             pmc WRITE_ASC,openFailureText
+            jmp errorHandler
+readErrorHandler
+            sta errorCode
+            pmc WRITE_ASC,readFailureText
             jmp errorHandler
 closeErrorHandler
             sta errorCode
@@ -152,8 +186,14 @@ endMain
 
 openParams  db  3           ; Parameter count
 oPathPtr    ds  2           ; Input param - file to open
-oBufPtr     da  inBuf       ; Input param - I/O buffer
+oBufPtr     da  openIoBuf   ; Input param - I/O buffer
 fileNum     ds  1           ; Output param - file ref num
+
+readParams  db  4
+readNum     ds  1
+            da  readIoBuf
+reqCount    dw  512
+transCount  ds  2
 
 closeParams db  1           ; Parameter count
 closeNum    db  0           ; Input param - ref num to close
@@ -161,8 +201,11 @@ closeNum    db  0           ; Input param - ref num to close
 fileName    db  4
             asc "BLAH"
 
+charCount   ds  2
+
 errorCode        db  0
 openFailureText  asc "FAILED TO OPEN FILE ",00
+readFailureText  asc "FAILED TO READ FILE ",00
 closeFailureText asc "FAILED TO CLOSE FILE ",00
 errorCodeText    asc "(ERROR CODE ",00
 
@@ -265,6 +308,7 @@ ec3d    da  $0000
 ec3e    da  $0000
 ec3f    da  $0000
 ec40    da  em40
+ec41    da  $0000
 ec42    da  em42
 ec43    da  $0000
 ec44    da  em44
@@ -297,5 +341,6 @@ filler  ds  \,$00
 *
 * Must start on page boundary
 *
-inBuf   ds  1024
+openIoBuf   ds  1024
+readIoBuf   ds  512
 
