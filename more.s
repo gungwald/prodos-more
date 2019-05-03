@@ -12,8 +12,13 @@
 *   accumulator (A) is less than the parameter: A < Param
 * BGE - Branch if Accum >= Param is BCS
 
+PROMPT  equ $33
+BUFF    equ $200
 
-* System subroutines stored in ROM
+* System subroutines stored in Monitor ROM
+GETLN   equ $fd6a   ; Reads a line of input, with prompt from $33
+GETLNZ  equ $fd67   ; Reads a line of input, CR first
+GETLN1  equ $fd6f   ; Reads a line of input, no prompt
 CROUT   equ $fd8e   ; Outputs a carriage return
 PRBYTE  equ $fdda   ; Outputs a byte
 COUT    equ $fded   ; Outputs a character
@@ -29,9 +34,10 @@ CLOSE   equ $cc
 
 * Constants
 EOF     equ $4c     ; End of file
-ADDR    equ $06
+PTR     equ $06
 MAX_EC  equ $5a     ; The largest error code
 CR      equ $0d     ; Carriage return
+BUF_SIZ equ $00ff
 
 
 WRITE_CHAR  mac
@@ -65,21 +71,22 @@ finish      pla         ; Restore Y by pulling stack into A
 
 
 WRITE_STR   mac
-            tya         ; Preserve Y
+            tya             ; Preserve Y
             pha
-            lda ]1      ; Length byte
+            lda ]1          ; Length byte
             sta len
-            ldy #1      ; Prepare loop index
-nextch      cpy len     ; Check if beyond end of string
-            bcc writech ; Y is Less than
-            beq writech ; Or equal to len
+            ldy #1          ; Prepare loop index
+nextChar    tya
+            cmp len         ; Check if beyond end of string
+            bcc writeChar   ; Y is Less than
+            beq writeChar   ; or equal to len
             jmp finish
-writech     lda ]1,y    ; Load a character
+writeChar   lda ]1,y        ; Load a character
             jsr COUT
             iny
-            jmp nextch
+            jmp nextChar
 len         db  0
-finish      pla         ; Restore Y
+finish      pla             ; Restore Y
             tay
             eom
 
@@ -87,6 +94,44 @@ finish      pla         ; Restore Y
 COPY_BYTE   mac
             lda ]1
             sta ]2
+            eom
+
+* Copies a line out of BUFF into ]1.
+* Length is in X as is done by GETLN.
+COPY_BUFF   mac
+            tya             ; Preserve Y register
+            pha             ;  by pushing it on the stack
+            txa             ; Transfer X to A for compare
+            cmp #$ff        ; Check if string is too long
+            bne startCopy   ; If not, get started
+            dex             ; If so, shrink to fit with length byte
+startCopy   stx ]1          ; Store length to target string
+            ldy #0          ; Initialize loop index
+nextChar    tya             ; Move current position to A
+            cmp ]1          ; Compare current position with length
+            beq endCopyLine ; Quit if we've reached the end
+            lda BUFF,y      ; Load current character
+            iny             ; BUFF and ]1 are off by 1 because of len byte
+            sta ]1,y        ; Store character into target string
+            jmp nextChar    ; Continue with next character
+endCopyLine pla             ; Restore Y by pulling value from stack
+            tay             ;  and transferring to Y
+            eom
+
+WRITE_BUFF  mac
+            tya
+            pha
+            stx len
+            ldy #0
+nextByte    tya
+            cmp len
+            beq done
+            lda BUFF,y
+            jsr COUT
+            iny
+            jmp nextByte
+done        pla
+            tay
             eom
 
 * Starting at $9000 because:
@@ -97,17 +142,21 @@ COPY_BYTE   mac
 mainProgram
             org $8000
 
-            lda #<fileName
-            sta oPathPtr
-            lda #>fileName
-            sta oPathPtr+1
+getFileNam
+            WRITE_ASC prompt
+            COPY_BYTE #"?";PROMPT
+            jsr GETLN1
+            WRITE_ASC buffText
+            WRITE_BUFF
+            jsr CROUT
+            COPY_BUFF fileName
 
 openFile    jsr MLI
             db  OPEN
             da  openParams
             bne openErrorHandler
 
-readFile    pmc COPY_BYTE,fileNum;readNum
+readFile    COPY_BYTE fileNum;readNum
 readNext    jsr MLI
             db  READ
             da  readParams
@@ -121,15 +170,18 @@ writeScreen
             sty lineCount
             sty charCount
 nextChar    lda readIoBuf,y
+            inc charCount
+            ora #$80
             jsr COUT
             cmp $0d
             bne continue
             inc lineCount
-continue    inc charCount
+continue    cpy #<BUF_SIZ
+            beq readNext
             iny
             jmp nextChar
 
-closeFile   pmc COPY_BYTE,fileNum;closeNum
+closeFile   COPY_BYTE fileNum;closeNum
             jsr MLI
             db  CLOSE
             dw  closeParams
@@ -137,19 +189,19 @@ closeFile   pmc COPY_BYTE,fileNum;closeNum
             jmp endMain
 openErrorHandler
             sta errorCode
-            pmc WRITE_ASC,openFailureText
+            WRITE_ASC openFailureText
             jmp errorHandler
 readErrorHandler
             sta errorCode
-            pmc WRITE_ASC,readFailureText
+            WRITE_ASC readFailureText
             jmp errorHandler
 closeErrorHandler
             sta errorCode
-            pmc WRITE_ASC,closeFailureText
+            WRITE_ASC closeFailureText
 errorHandler
-            pmc WRITE_STR,fileName
-            pmc WRITE_CHAR,":"
-            pmc WRITE_CHAR," "
+            WRITE_STR fileName
+            WRITE_CHAR ":"
+            WRITE_CHAR " "
             lda errorCode
             cmp #MAX_EC         ; Compare by A - MAX_EC
             bcs unknownError    ; Branch if A >= MAX_EC
@@ -158,51 +210,55 @@ errorHandler
             adc errorCode       ; Double for indexing addresses
             tax
             lda errorMessages,x
-            sta ADDR
+            sta PTR
             inx
             lda errorMessages,x
-            sta ADDR+1
+            sta PTR+1
             bne writeError
-            lda ADDR
+            lda PTR
             bne writeError
 unknownError
-            pmc WRITE_ASC,unknownErrorCodeText
-            pmc WRITE_CHAR,"$"
-            pmc WRITE_BYTE,errorCode
+            WRITE_ASC unknownErrorCodeText
+            WRITE_CHAR "$"
+            WRITE_BYTE errorCode
             jsr CROUT
             jmp endMain 
 writeError
-            pmc WRITE_ASC,(ADDR)
-            pmc WRITE_CHAR," "
-            pmc WRITE_ASC,errorCodeText
-            pmc WRITE_CHAR,"$"
-            pmc WRITE_BYTE,errorCode
-            pmc WRITE_CHAR,")"
+            WRITE_ASC (PTR)
+            WRITE_CHAR " "
+            WRITE_ASC errorCodeText
+            WRITE_CHAR "$"
+            WRITE_BYTE errorCode
+            WRITE_CHAR ")"
             jsr CROUT
 endMain
+            COPY_BYTE #"]";PROMPT   ; Restore normal prompt
             rts
 
 * DAT-uh
 
 openParams  db  3           ; Parameter count
-oPathPtr    ds  2           ; Input param - file to open
+oPathPtr    da  fileName    ; Input param - file to open
 oBufPtr     da  openIoBuf   ; Input param - I/O buffer
 fileNum     ds  1           ; Output param - file ref num
 
 readParams  db  4
 readNum     ds  1
             da  readIoBuf
-reqCount    dw  512
+reqCount    dw  BUF_SIZ
 transCount  ds  2
 
 closeParams db  1           ; Parameter count
 closeNum    db  0           ; Input param - ref num to close
 
-fileName    db  4
-            asc "BLAH"
+fileName    ds  $ff         ; String starting with length byte
 
 charCount   ds  2
+lineCount   ds  1
+len         ds  1
 
+buffText         asc "BUFF=",00
+prompt           asc "ENTER FILE NAME: ",00
 errorCode        db  0
 openFailureText  asc "FAILED TO OPEN FILE ",00
 readFailureText  asc "FAILED TO READ FILE ",00
@@ -342,5 +398,5 @@ filler  ds  \,$00
 * Must start on page boundary
 *
 openIoBuf   ds  1024
-readIoBuf   ds  512
+readIoBuf   ds  BUF_SIZ
 
