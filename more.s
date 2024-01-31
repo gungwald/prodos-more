@@ -1,8 +1,11 @@
+pr#1
+
+:p
+
 ********************************
 *                              *
 * MORE - UN*X MORE COMMAND     *
 * ASSEMBLES WITH MERLIN        *
-* BILL CHATFIELD               *
 *                              *
 ********************************
 
@@ -23,6 +26,11 @@ CROUT          EQU   $FD8E
 COUT           EQU   $FDED
 PRBYTE         EQU   $FDDA
 
+* SUBROUTINES IN BASIC.SYSTEM ROM:
+
+GETBUFR        EQU   $BEF5      ;ALLOCATE BUFFER, DESTROYS X & Y
+FREEBUFR       EQU   $BEF8      ;FREE BUFFER
+
 * PRODOS ENTRY POINT
 
 MLI            EQU   $BF00
@@ -31,6 +39,11 @@ MLI            EQU   $BF00
 
 OURCH          EQU   $057B      ;80-COL HORIZ CURSOR POSITION
 OURCV          EQU   $05FB      ;VERTICAL CURSOR POSITION
+
+* ZERO-PAGE ADDRESSES
+
+ZP_A1L         EQU   $3C        ;MONITOR GENERAL PURPOSE
+ZP_A1H         EQU   $3D        ;MONITOR GENERAL PURPOSE
 
 * PRODOS COMMAND CODES
 
@@ -161,6 +174,15 @@ MAIN           CLD              ;CLEAR DECIMAL FLG, AVOID CRASH
                BEQ   :END       ;USER JUST PRESSED RETURN
                CPIN  FILENAME   ;COPY "IN" BUF TO FILENAME
 *
+* GET FILE I/O BUFFER FOR OPEN CALL
+*
+               LDA   #4         ;FOUR 256 BYTE PAGES = 1KB
+               JSR   GETBUFR    ;GET BUF FROM BASIC.SYSTEM
+               BCS   :ERRFWDR   ;CARRY SET INDICATES AN ERROR
+               STA   OBUFADDR+1 ;GETBUFR RETURNS HIBYTE IN A
+               LDA   #0         ;PREPARE
+               STA   OBUFADDR   ;LOBYTE IS 0 B/C ADDR OF PAGE
+*
 * OPEN FILE
 *
                JSR   MLI
@@ -174,9 +196,24 @@ MAIN           CLD              ;CLEAR DECIMAL FLG, AVOID CRASH
                STA   READFNUM
                STA   CLOSFNUM
 *
+* GET BUFFER FOR READ OPERATION FROM BASIC.SYSTEM
+*
+               LDA   #1         ;ONE 256 BYTE BUFFER
+               JSR   GETBUFR    ;CALL BASIC.SYSTEM SUB
+               BCS   :ERRFWDR   ;CARRY SET MEANS ERROR
+               STA   RBADDR+1   ;STORE HI-BYTE
+               STA   ZP_A1H     ;AGAIN, FOR 0-PAGE INDIRECTION
+               LDA   #0         ;0 FOR LO-BYTE
+               STA   RBADDR     ;STORE IT
+               STA   ZP_A1L     ;AGAIN, FOR 0-PAGE INDIRECTION
+*
 * PRINT THE FILE
 *
                JSR   VIEWFILE   ;MUST CLOSE BEFORE ERR HANDLING
+*
+* FREE READ BUFFER
+*
+               JSR   FREEBUFR
 *
 * CLOSE FILE
 *
@@ -184,6 +221,10 @@ MAIN           CLD              ;CLEAR DECIMAL FLG, AVOID CRASH
                DB    CLOSCMD
                DA    CLOSPRMS
                STA   CLOSERR
+*
+* FREE FILE BUFFER USED IN OPEN CALL
+*
+               JSR   FREEBUFR
 *
 * CHECK FOR ERRORS
 *
@@ -234,18 +275,17 @@ VIEWFILE
 ********************************
 
 WRITEBUF
+               PUSHY
                LDY   #0         ;INIT CHAR COUNTER VARIABLE
 :LOOP          CPY   READCNT    ;COMPARE TO MAX CHARS
                BEQ   :ENDLOOP
-               LDA   READBUF,Y  ;GET CHAR FROM BUFFER
+               LDA   (ZP_A1L),Y ;GET CHAR FROM BUFFER
                ORA   #%10000000 ;TURN ON HIGH BIT FOR PRINTING
-               JSR   COUT       ;WRITE IT TO THE SCREEN
+               JSR   COUT       ;COUT PRESERVES ACCUM
 *
 * CHECK END OF LINE
 *
-               LDA   READBUF,Y  ;LOAD AGAIN, WITHOUT HIBIT
-               AND   #%01111111 ;TURN OFF HIBIT, IF SET
-               CMP   #CR        ;COMPARE TO CR WITHOUT HIBIT
+               CMP   #CR_HIBIT  ;COMPARE TO CARRIAGE RETURN
                BNE   :CONT      ;IF NOT END OF LINE, NEXT CHAR
                INC   LINENUM    ;NEXT LINE HAS BEEN REACHED
 *
@@ -261,6 +301,7 @@ WRITEBUF
 :CONT          INY              ;STATBAR HAS ADJUSTED LINENUM
                JMP   :LOOP
 :ENDLOOP       NOP
+               POPY
 
                DO    TRACE
                PUTS  EXVIEW
@@ -377,11 +418,10 @@ ERRCODE        DS    1
 READERR        DS    1
 CLOSERR        DS    1
 LINENUM        DS    1
-BAR            STR   '[RET] NEXT LINE   [SPC] NEXT PAGE   [Q]UIT'
+BAR            STR   '[RET] NEXT LINE / [SPC] NEXT PAGE / [Q]UIT'
 USRQUIT        DS    1
 BUFCHAR        DS    1
 USRCHAR        DS    1
-I              DS    1
 
 ENVIEW         STR   'ENTERING VIEWFILE'
 EXVIEW         STR   'EXITING VIEWFILE'
@@ -389,37 +429,33 @@ ENSTATB        STR   'ENTERING STATUSBAR'
 EXSTATB        STR   'EXITING STATUSBAR'
 ENERASEB       STR   'ENTERING ERASEBAR'
 EXERASEB       STR   'EXITING ERASEBAR'
-
-
+*
 * OPEN PARAMETERS
-
+*
 OPENPRMS       DB    3
                DA    FILENAME
-               DA    OPENBUF
+OBUFADDR       DS    2
 OPENFNUM       DS    1
-
+*
 * READ PARAMETERS
-
+*
 READPRMS       DB    4
 READFNUM       DS    1
-               DA    READBUF
+RBADDR         DS    2
 REQCNT         DW    BUFSIZE
 READCNT        DS    2
-
+*
 * CLOSE PARAMETERS
-
+*
 CLOSPRMS       DB    1
 CLOSFNUM       DS    1
-
-* REST GOES HERE
-
-
+*
 * BUFFERS
-
+*
 * CONSUME ALL BYTES UP TO THE NEXT PAGE BOUNDRY
-FILLER         DS    \,$00
+FILLER DS \,$00
 * MUST START ON PAGE BOUNDRY
-OPENBUF        DS    1024
-READBUF        DS    BUFSIZE
+*OPENBUF DS 1024
+*READBUF DS BUFSIZE
 
 :
