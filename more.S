@@ -160,11 +160,11 @@ SET23          .MA
 ********************************
 
 MAIN           CLD              ;CLEAR DECIMAL FLG, AVOID CRASH
-               SET0  USRQUIT    ;INITIALIZE TO "NO"
+               >SET0 USRQUIT    ;INITIALIZE TO "NO"
 *
 * GET FILE NAME
 *
-               PUTS  PROMPT
+               >PUTS PROMPT
                JSR   GETLN1     ;LENGTH IN X, CR AT END
                CPX   #0         ;IS THE LENGTH ZERO?
                BEQ   END        ;USER JUST PRESSED RETURN
@@ -247,10 +247,10 @@ END            NOP
 
 VIEWFILE
                DO    TRACE
-               PUTS  ENVIEW
+               >PUTS ENVIEW
                FIN
 
-               SET1  LINENUM    ;INIT LINE NUMBER
+               >SET1 LINENUM    ;INIT LINE NUMBER
 .1             JSR   MLI        ;CALL PRODOS TO READ FILE
                DB    READCMD    ;SPECIFY PRODOS READ COMMAND
                DA    READPRMS   ;READ PARAMETERS
@@ -271,7 +271,7 @@ VIEWFILE
 ********************************
 
 WRITEBUF
-               PUSHY
+               >PUSHY
                LDY   #0         ;INIT CHAR COUNTER VARIABLE
 .1             CPY   READCNT    ;COMPARE TO MAX CHARS
                BEQ   .3      
@@ -296,10 +296,10 @@ WRITEBUF
                BEQ   .3         ;YES? THEN END SUB
 .2             INY              ;STATBAR HAS ADJUSTED LINENUM
                JMP   .1   
-.3             POPY
+.3             >POPY
 
                DO    TRACE
-               PUTS  EXVIEW
+               >PUTS  EXVIEW
                FIN
 
                RTS
@@ -328,29 +328,29 @@ PRASCII        PHA
 ********************************
 
 STATBAR
-               DO    TRACE
-               PUTS  ENSTATB
+               DO       TRACE
+               >PUTS    ENSTATB
                FIN
 
-               PUSHY
-               PUTS  BAR
-.1             JSR   RDKEY      ;GET A KEY FROM THE USER
-               CMP   #" "       ;CHECK IF SPACE ENTERED
-               BNE   .2         ;IF NOT FORWARD TO NEXT CHECK
-               SET1  LINENUM    ;ADVANCE ONE PAGE, STORE 1
-               JMP   .4         ;PROCESSED SPACE SO DONE
-.2             CMP   #CR_HIBIT  ;CHECK FOR CARRIAGE RETURN
-               BNE   .3      
-               SET23 LINENUM
-               JMP   .4      
-.3             CMP   #"Q"       ;USER WANTS TO QUIT
-               BNE   .1         ;NO RECOGNIZED INPUT
-               SET1  USRQUIT
-.4             JSR   ERASEBAR
-               POPY
+               >PUSHY
+               >PUTS    BAR
+.1             JSR      RDKEY      ;GET A KEY FROM THE USER
+               CMP      #" "       ;CHECK IF SPACE ENTERED
+               BNE      .2         ;IF NOT FORWARD TO NEXT CHECK
+               >SET1    LINENUM    ;ADVANCE ONE PAGE, STORE 1
+               JMP      .4         ;PROCESSED SPACE SO DONE
+.2             CMP      #CR_HIBIT  ;CHECK FOR CARRIAGE RETURN
+               BNE      .3      
+               >SET23   LINENUM
+               JMP      .4      
+.3             CMP      #"Q"       ;USER WANTS TO QUIT
+               BNE      .1         ;NO RECOGNIZED INPUT
+               >SET1    USRQUIT
+.4             JSR      ERASEBAR
+               >POPY
 
-               DO    TRACE
-               PUTS  EXSTATB
+               DO       TRACE
+               >PUTS    EXSTATB
                FIN
 
                RTS
@@ -362,24 +362,24 @@ STATBAR
 ********************************
 
 ERASEBAR
-               DO    TRACE
-               PUTS  ENERASEB
+               DO       TRACE
+               >PUTS    ENERASEB
                FIN
 
-               PUSHY
-               SET0  OURCH      ;RESET CURSOR TO BEG OF LINE
-               LDY   #0         ;INIT COUNTER FOR SPACES
-.1             CPY   BAR        ;FIRST BYTE IS LENGTH
-               BEQ   .2         ;IF Y=LEN THEN DONE
-               LDA   #" "       ;LOAD SPACE
-               JSR   COUT       ;WRITE TO SCREEN
-               INY              ;MAKE PROGRESS
-               JMP   .1         ;LOOP TO NEXT CHAR
-.2             SET0  OURCH      ;RESET CURSON TO BEG OF LINE
+               >PUSHY
+               >SET0    OURCH      ;RESET CURSOR TO BEG OF LINE
+               LDY      #0         ;INIT COUNTER FOR SPACES
+.1             CPY      BAR        ;FIRST BYTE IS LENGTH
+               BEQ      .2         ;IF Y=LEN THEN DONE
+               LDA      #" "       ;LOAD SPACE
+               JSR      COUT       ;WRITE TO SCREEN
+               INY                 ;MAKE PROGRESS
+               JMP      .1         ;LOOP TO NEXT CHAR
+.2             >SET0    OURCH      ;RESET CURSON TO BEG OF LINE
                POPY
 
-               DO    TRACE
-               PUTS  EXERASEB
+               DO       TRACE
+               >PUTS    EXERASEB
                FIN
 
                RTS
@@ -391,7 +391,7 @@ ERASEBAR
 ********************************
 
 ERRPROC        STA   ERRCODE
-               PUTS  ERRTXT
+               >PUTS ERRTXT
                JSR   PRBYTE
                JSR   CROUT
                RTS
