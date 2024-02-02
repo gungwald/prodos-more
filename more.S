@@ -275,20 +275,20 @@ WRITEBUF
                LDY   #0         ;INIT CHAR COUNTER VARIABLE
 .1             CPY   READCNT    ;COMPARE TO MAX CHARS
                BEQ   .3      
-               LDA   (ZP_A1L),Y ;GET CHAR FROM BUFFER
+               LDA   (ZP.A1L),Y ;GET CHAR FROM BUFFER
                ORA   #%10000000 ;TURN ON HIGH BIT FOR PRINTING
                JSR   COUT       ;COUT PRESERVES ACCUM
 *
 * CHECK END OF LINE
 *
-               CMP   #CR_HIBIT  ;COMPARE TO CARRIAGE RETURN
+               CMP   #CR.HIBIT  ;COMPARE TO CARRIAGE RETURN
                BNE   .2         ;IF NOT END OF LINE, NEXT CHAR
                INC   LINENUM    ;NEXT LINE HAS BEEN REACHED
 *
 * CHECK AT END OF PAGE
 *
                LDA   LINENUM
-               CMP   #SCR_HGHT  ;AT BOTTOM OF SCREEN?
+               CMP   #SCR.HGHT  ;AT BOTTOM OF SCREEN?
                BNE   .2         ;NO? THEN NEXT CHAR
                JSR   STATBAR    ;YES? THEN SHOW THE STATUS BAR
                LDA   #1         ;SETUP FOR NEXT LINE
@@ -339,7 +339,7 @@ STATBAR
                BNE      .2         ;IF NOT FORWARD TO NEXT CHECK
                >SET1    LINENUM    ;ADVANCE ONE PAGE, STORE 1
                JMP      .4         ;PROCESSED SPACE SO DONE
-.2             CMP      #CR_HIBIT  ;CHECK FOR CARRIAGE RETURN
+.2             CMP      #CR.HIBIT  ;CHECK FOR CARRIAGE RETURN
                BNE      .3      
                >SET23   LINENUM
                JMP      .4      
@@ -402,21 +402,23 @@ ERRPROC        STA   ERRCODE
 *                              *
 ********************************
 
-PROMPT         STR   "FILE:"
-ERRTXT         STR   "ERROR:"
-FILENAME       DS    $FF
-HERE           STR   "HERE"
-HERE2          STR   "HERE2"
-READRET        STR   "READRET="
-SREADCNT       STR   "READCNT="
-ERRCODE        DS    1
-READERR        DS    1
-CLOSERR        DS    1
-LINENUM        DS    1
-BAR            STR   '[RET] NEXT LINE / [SPC] NEXT PAGE / [Q]UIT'
-USRQUIT        DS    1
-BUFCHAR        DS    1
-USRCHAR        DS    1
+PROMPT         .DA   #5          ;LENGTH BYTE
+               .AS   "FILE:"
+
+ERRTXT         .DA   #6           ;LENGTH BYTE
+               .AS   "ERROR:"
+               
+BAR            .DA   #42
+               .AS   '[RET] NEXT LINE / [SPC] NEXT PAGE / [Q]UIT'
+
+FILENAME       .BS   $FF
+ERRCODE        .BS   1
+READERR        .BS   1
+CLOSERR        .BS   1
+LINENUM        .BS   1
+USRQUIT        .BS   1
+BUFCHAR        .BS   1
+USRCHAR        .BS   1
 
 ENVIEW         STR   'ENTERING VIEWFILE'
 EXVIEW         STR   'EXITING VIEWFILE'
@@ -427,28 +429,28 @@ EXERASEB       STR   'EXITING ERASEBAR'
 *
 * OPEN PARAMETERS
 *
-OPENPRMS       DB    3
-               DA    FILENAME
-OBUFADDR       DS    2
-OPENFNUM       DS    1
+OPENPRMS       .DA   #3
+               .DA   FILENAME
+OBUFADDR       .BS   2
+OPENFNUM       .BS   1
 *
 * READ PARAMETERS
 *
-READPRMS       DB    4
-READFNUM       DS    1
-RBADDR         DS    2
-REQCNT         DW    BUFSIZE
-READCNT        DS    2
+READPRMS       .DA   #4
+READFNUM       .BS   1
+RBADDR         .BS   2
+REQCNT         .DA   BUFSIZE
+READCNT        .BS   2
 *
 * CLOSE PARAMETERS
 *
-CLOSPRMS       DB    1
-CLOSFNUM       DS    1
+CLOSPRMS       .DA   #1
+CLOSFNUM       .BS   1
 *
 * BUFFERS
 *
 * CONSUME ALL BYTES UP TO THE NEXT PAGE BOUNDRY
 *FILLER DS \,$00
 * MUST START ON PAGE BOUNDRY
-*OPENBUF DS 1024
-*READBUF DS BUFSIZE
+*OPENBUF .BS 1024
+*READBUF .BS BUFSIZE
