@@ -180,16 +180,17 @@ MAIN           CLD              ;CLEAR DECIMAL FLG, AVOID CRASH
                STA   OBUFADDR+1 ;GETBUFR RETURNS HIBYTE IN A
                LDA   #0         ;PREPARE
                STA   OBUFADDR   ;LOBYTE IS 0 B/C ADDR OF PAGE
-:OPENFILE      JSR   PRODOS
+*
+* OPEN FILE
+*
+               JSR   PRODOS
                DB    OPENCMD
                DA    OPENPRMS
-               BEQ   :OPEN_OK
-               JSR   ERRPROC
-               JMP   :FREEOBUF
+               BNE   :OPENERR
 *
 * COPY FILE NUMBER FROM OPEN PARAMETERS TO READ AND CLOSE
 *
-:OPEN_OK       LDA   OPENFNUM
+               LDA   OPENFNUM
                STA   READFNUM
                STA   CLOSFNUM
 *
@@ -197,10 +198,8 @@ MAIN           CLD              ;CLEAR DECIMAL FLG, AVOID CRASH
 *
                LDA   #1         ;ONE 256 BYTE BUFFER
                JSR   GETBUFR    ;CALL BASIC.SYSTEM SUB
-               BCC   :RBUF_OK   ;CARRY CLR MEANS NO ERROR
-               JSR   ERRPROC
-               JMP   :CLOSFILE
-:RBUF_OK       STA   RBADDR+1   ;STORE HI-BYTE
+               BCS   :RBUFERR   ;CARRY CLR MEANS NO ERROR
+               STA   RBADDR+1   ;STORE HI-BYTE
                LDA   #0         ;0 FOR LO-BYTE
                STA   RBADDR     ;STORE IT
                STA   ZP.A1L     ;AGAIN, FOR 0-PAGE INDIRECTION
@@ -211,11 +210,16 @@ MAIN           CLD              ;CLEAR DECIMAL FLG, AVOID CRASH
 *
 * CLEANUP
 *
-:FREERBUF      JSR   FREEBUFR   ;FREE READ BUFFER
+               JSR   FREEBUFR   ;FREE READ BUFFER
+               JMP   :CLOSFILE  ;SKIP OVER READ BUF ERR HANDLER
+
+:RBUFERR       JSR   ERRPROC    ;HANDLE ERR GETTING READ BUF
+
 :CLOSFILE      JSR   PRODOS     ;CLOSE THE FILE
                DB    CLOSCMD
                DA    CLOSPRMS
-               BCC   FREEOBUF
+               BEQ   :FREEOBUF
+               
 :OPENERR       JSR   ERRPROC
 :FREEOBUF      JSR   FREEBUFR   ;FREE OPEN I/O BUFFER
                JMP   :END
@@ -371,12 +375,12 @@ ERASEBAR
 ********************************
 *                              *
 * ERROR HANDLER                *
-* INPUT PARAM: ERRCODE         *
+* INPUT PARAM: A HOLDS ERRCODE *
 *                              *
 ********************************
 
 ERRPROC
-            LDA     ERRCODE
+            STA     ERRCODE
             CMP     #0
             BEQ     :NOERR
             CMP     #EOFERR
@@ -394,23 +398,21 @@ ERRPROC
 *                              *
 ********************************
 
-PROMPT         .DA   #5          ;LENGTH BYTE
-               .AS   "FILE:"
-
-ERRTXT         .DA   #6           ;LENGTH BYTE
-               .AS   "ERROR:"
-               
-BAR            .DA   #42
-               .AS   '[RET] NEXT LINE / [SPC] NEXT PAGE / [Q]UIT'
-
-FILENAME       .BS   $FF
-ERRCODE        .BS   1
-READERR        .BS   1
-CLOSERR        .BS   1
-LINENUM        .BS   1
-USRQUIT        .BS   1
-BUFCHAR        .BS   1
-USRCHAR        .BS   1
+PROMPT         STR   "FILE:"
+ERRTXT         STR   "ERROR:"
+FILENAME       DS    $FF
+HERE           STR   "HERE"
+HERE2          STR   "HERE2"
+READRET        STR   "READRET="
+SREADCNT       STR   "READCNT="
+ERRCODE        DS    1
+READERR        DS    1
+CLOSERR        DS    1
+LINENUM        DS    1
+BAR            STR   '[RET] LINE  [SPC] PAGE  [Q]UIT'
+USRQUIT        DS    1
+BUFCHAR        DS    1
+USRCHAR        DS    1
 
 ENVIEW         STR   'ENTERING VIEWFILE'
 EXVIEW         STR   'EXITING VIEWFILE'
