@@ -169,15 +169,17 @@ MAIN           CLD              ;CLEAR DECIMAL FLG, AVOID CRASH
                >PUTS PROMPT
                JSR   GETLN1     ;LENGTH IN X, CR AT END
                CPX   #0         ;IS THE LENGTH ZERO?
-               BEQ   END        ;USER JUST PRESSED RETURN
-               CPIN  FILENAME   ;COPY "IN" BUF TO FILENAME
+               BNE   CONT1      ;USER JUST PRESSED RETURN
+               JMP   :END
+CONT1          CPIN  FILENAME   ;COPY "IN" BUF TO FILENAME
 *
 * GET FILE I/O BUFFER FOR OPEN CALL
 *
                LDA   #4         ;FOUR 256 BYTE PAGES = 1KB
                JSR   GETBUFR    ;GET BUF FROM BASIC.SYSTEM
-               BCS   :OBUFERR   ;CARRY CLEAR MEANS NO ERROR
-               STA   OBUFADDR+1 ;GETBUFR RETURNS HIBYTE IN A
+               BCC   CONT2
+               JMP   :OBUFERR   ;CARRY CLEAR MEANS NO ERROR
+CONT2          STA   OBUFADDR+1 ;GETBUFR RETURNS HIBYTE IN A
                LDA   #0         ;PREPARE
                STA   OBUFADDR   ;LOBYTE IS 0 B/C ADDR OF PAGE
 *
@@ -198,8 +200,9 @@ MAIN           CLD              ;CLEAR DECIMAL FLG, AVOID CRASH
 *
                LDA   #1         ;ONE 256 BYTE BUFFER
                JSR   GETBUFR    ;CALL BASIC.SYSTEM SUB
-               BCS   :RBUFERR   ;CARRY CLR MEANS NO ERROR
+               BCS   :RBUFERR   ;CARRY SET MEANS ERROR
                STA   RBADDR+1   ;STORE HI-BYTE
+               STA   ZP_A1H     ;FOR 0-PAGE INDIRECTION
                LDA   #0         ;0 FOR LO-BYTE
                STA   RBADDR     ;STORE IT
                STA   ZP.A1L     ;AGAIN, FOR 0-PAGE INDIRECTION
@@ -220,7 +223,15 @@ MAIN           CLD              ;CLEAR DECIMAL FLG, AVOID CRASH
                DA    CLOSPRMS
                BEQ   :FREEOBUF
                
-:OPENERR       JSR   ERRPROC
+:OPENERR       STA   ERRCODE
+               PUTS  OERRMSG
+               PUTS  FILENAME
+               LDA   #"'"
+               JSR   COUT
+               LDA   #":"
+               JSR   COUT
+               LDA   ERRCODE
+               JSR   ERRPROC
 :FREEOBUF      JSR   FREEBUFR   ;FREE OPEN I/O BUFFER
                JMP   :END
 :OBUFERR       JSR   ERRPROC
@@ -414,6 +425,8 @@ USRQUIT        DS    1
 BUFCHAR        DS    1
 USRCHAR        DS    1
 
+OERRMSG        STR   "FAILED TO OPEN FILE '"
+
 ENVIEW         STR   'ENTERING VIEWFILE'
 EXVIEW         STR   'EXITING VIEWFILE'
 ENSTATB        STR   'ENTERING STATUSBAR'
@@ -448,5 +461,3 @@ CLOSFNUM       .BS   1
 * MUST START ON PAGE BOUNDRY
 *OPENBUF DS 1024
 *READBUF DS BUFSIZE
-
-:
