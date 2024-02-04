@@ -23,14 +23,16 @@ COUT           .EQ   $FDED
 PRBYTE         .EQ   $FDDA
 *
 * SUBROUTINES IN BASIC.SYSTEM ROM:
-*
-GETBUFR        .EQ   $BEF5      ;ALLOCATE BUFFER, DESTROYS X & Y
-FREEBUFR       .EQ   $BEF8      ;FREE BUFFER
-*
+
+GETBUFR        EQU   $BEF5      ;BCC=OKAY & A=HIBYTE OF BUF
+                                ;BCS=FAIL & A=ERRCODE
+                                ;X & Y ARE DESTROYED
+FREEBUFR       EQU   $BEF8      ;FREE BUFFER
+
 * PRODOS ENTRY POINT
-*
-MLI            .EQ   $BF00
-*
+
+PRODOS         EQU   $BF00      ;MACHINE LANG IFACE (MLI)
+
 * MEMORY LOCATIONS
 *
 OURCH          .EQ   $057B      ;80-COL HORIZ CURSOR POSITION
@@ -174,21 +176,20 @@ MAIN           CLD              ;CLEAR DECIMAL FLG, AVOID CRASH
 *
                LDA   #4         ;FOUR 256 BYTE PAGES = 1KB
                JSR   GETBUFR    ;GET BUF FROM BASIC.SYSTEM
-               BCS   ERRFWDR    ;CARRY SET INDICATES AN ERROR
+               BCS   :OBUFERR   ;CARRY CLEAR MEANS NO ERROR
                STA   OBUFADDR+1 ;GETBUFR RETURNS HIBYTE IN A
                LDA   #0         ;PREPARE
                STA   OBUFADDR   ;LOBYTE IS 0 B/C ADDR OF PAGE
-*
-* OPEN FILE
-*
-               JSR   MLI
+:OPENFILE      JSR   PRODOS
                DB    OPENCMD
                DA    OPENPRMS
-               BNE   ERRFWDR
+               BEQ   :OPEN_OK
+               JSR   ERRPROC
+               JMP   :FREEOBUF
 *
 * COPY FILE NUMBER FROM OPEN PARAMETERS TO READ AND CLOSE
 *
-               LDA   OPENFNUM
+:OPEN_OK       LDA   OPENFNUM
                STA   READFNUM
                STA   CLOSFNUM
 *
@@ -196,47 +197,30 @@ MAIN           CLD              ;CLEAR DECIMAL FLG, AVOID CRASH
 *
                LDA   #1         ;ONE 256 BYTE BUFFER
                JSR   GETBUFR    ;CALL BASIC.SYSTEM SUB
-               BCS   ERRFWDR    ;CARRY SET MEANS ERROR
-               STA   RBADDR+1   ;STORE HI-BYTE
-               STA   ZP.A1H     ;AGAIN, FOR 0-PAGE INDIRECTION
+               BCC   :RBUF_OK   ;CARRY CLR MEANS NO ERROR
+               JSR   ERRPROC
+               JMP   :CLOSFILE
+:RBUF_OK       STA   RBADDR+1   ;STORE HI-BYTE
                LDA   #0         ;0 FOR LO-BYTE
                STA   RBADDR     ;STORE IT
                STA   ZP.A1L     ;AGAIN, FOR 0-PAGE INDIRECTION
 *
 * PRINT THE FILE
 *
-               JSR   VIEWFILE   ;MUST CLOSE BEFORE ERR HANDLING
+               JSR   VIEWFILE
 *
-* FREE READ BUFFER
+* CLEANUP
 *
-               JSR   FREEBUFR
-*
-* CLOSE FILE
-*
-               JSR   MLI
+:FREERBUF      JSR   FREEBUFR   ;FREE READ BUFFER
+:CLOSFILE      JSR   PRODOS     ;CLOSE THE FILE
                DB    CLOSCMD
                DA    CLOSPRMS
-               STA   CLOSERR
-*
-* FREE FILE BUFFER USED IN OPEN CALL
-*
-               JSR   FREEBUFR
-*
-* CHECK FOR ERRORS
-*
-               LDA   READERR    ;RELOAD THE READ RESULT CODE
-               CMP   EOFERR     ;WAS IT AN EOF "ERROR"
-               BEQ   END        ;EOF IS NOT REALLY AN ERROR
-               CMP   #0
-               BNE   ERRFWDR
-               LDA   CLOSERR
-               BNE   ERRFWDR
-               JMP   END
-*
-* FINISH
-*
-ERRFWDR        JSR   ERRPROC
-END            NOP
+               BCC   FREEOBUF
+:OPENERR       JSR   ERRPROC
+:FREEOBUF      JSR   FREEBUFR   ;FREE OPEN I/O BUFFER
+               JMP   :END
+:OBUFERR       JSR   ERRPROC
+:END           NOP
                RTS
 
 ********************************
@@ -250,18 +234,18 @@ VIEWFILE
                >PUTS ENVIEW
                FIN
 
-               >SET1 LINENUM    ;INIT LINE NUMBER
-.1             JSR   MLI        ;CALL PRODOS TO READ FILE
+               SET1  LINENUM    ;INIT LINE NUMBER
+:LOOP          JSR   PRODOS     ;CALL PRODOS TO READ FILE
                DB    READCMD    ;SPECIFY PRODOS READ COMMAND
                DA    READPRMS   ;READ PARAMETERS
-               STA   READERR    ;SAVE RESULT OF READ OPERATION
-               BNE   .2         ;IF ERROR THEN END SUB
+               BNE   :READERR 
                JSR   WRITEBUF   ;WRITE TO SCREEN WHAT WAS READ
                LDA   #1         ;PREPARE FOR NEXT OP
                CMP   USRQUIT    ;IF USER WANTS TO QUIT, THEN
-               BEQ   .2         ;EXIT THE LOOP
-               JMP   .1         ;ELSE, GET THE NEXT BUFFER
-.2             NOP
+               BEQ   :ENDLOOP   ;EXIT THE LOOP
+               JMP   :LOOP      ;ELSE, GET THE NEXT BUFFER
+:READERR       JSR   ERRPROC
+:ENDLOOP       NOP
                RTS
 
 ********************************
@@ -387,14 +371,22 @@ ERASEBAR
 ********************************
 *                              *
 * ERROR HANDLER                *
+* INPUT PARAM: ERRCODE         *
 *                              *
 ********************************
 
-ERRPROC        STA   ERRCODE
-               >PUTS ERRTXT
-               JSR   PRBYTE
-               JSR   CROUT
-               RTS
+ERRPROC
+            LDA     ERRCODE
+            CMP     #0
+            BEQ     :NOERR
+            CMP     #EOFERR
+            BEQ     :NOERR
+            PUTS    ERRTXT
+            LDA     ERRCODE
+            JSR     PRBYTE
+            JSR     CROUT
+:NOERR      NOP
+            RTS
 
 ********************************
 *                              *
@@ -452,5 +444,7 @@ CLOSFNUM       .BS   1
 * CONSUME ALL BYTES UP TO THE NEXT PAGE BOUNDRY
 *FILLER DS \,$00
 * MUST START ON PAGE BOUNDRY
-*OPENBUF .BS 1024
-*READBUF .BS BUFSIZE
+*OPENBUF DS 1024
+*READBUF DS BUFSIZE
+
+:
