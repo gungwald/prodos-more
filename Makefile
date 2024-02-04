@@ -25,8 +25,8 @@ endif
 # the PowerBook G4 and iBook G3. This version only requires Java 1.3.
 AC=java -jar AppleCommander-1.3.5-ac.jar
 SRC=more.s
-PGM=more
-BASE_DSK=prodos-2.0.3-boot.dsk
+PGM=MORE
+BASE_DSK=prodos-2.0.3.dsk
 VOL=$(PGM)
 DSK=$(PGM).dsk
 
@@ -35,12 +35,13 @@ DSK=$(PGM).dsk
 # disk instead.
 #$(AC) -pro140 $(DSK) $(VOL)
 
-$(DSK): $(PGM)
+$(DSK): $(PGM) test.txt
 	$(COPY) $(BASE_DSK) $(DSK)
-	$(AC) -p $(DSK) $(PGM) BIN 0x8000 < $(PGM)
+	$(AC) -p $(DSK) $(PGM) BIN 0x2000 < $(PGM)
+	cat test.txt | tr '\n' '\r' | $(AC) -p $(DSK) TEST TXT
 
 $(PGM): $(SRC) Makefile
-	merlin32 --verbose $(SRC)
+	merlin32 $(SRC)
 
 clean:
 	$(RM) $(DSK) $(PGM) *.zip _FileInformation.txt $(PGM)_Output.txt
