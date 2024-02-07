@@ -61,7 +61,7 @@ SCR.HGHT       .EQ   24         ;SCREEN HEIGHT
 *
 * DEBUGGING
 
-TRACE          EQU   1
+TRACE          EQU   0
 
 ********************************
 *                              *
@@ -508,97 +508,156 @@ ERRPROC
             CMP     #0
             BNE     :EEOF
             JMP     :END
+            
 :EEOF       CMP     #EOFERR
             BNE     :E01
             JMP     :END
+
 :E01        CMP     #1
             BNE     :E04
             PUTS    E01MSG
+            JMP     :END
+
 :E04        CMP     #4
             BNE     :E25
             PUTS    E04MSG
+            JMP     :END
+
 :E25        CMP     #$25
             BNE     :E27
             PUTS    E25MSG
+            JMP     :END
+
 :E27        CMP     #$27
             BNE     :E28
             PUTS    E27MSG
+            JMP     :END
+
 :E28        CMP     #$28
             BNE     :E2B
             PUTS    E28MSG
+            JMP     :END
+
 :E2B        CMP     #$2B
             BNE     :E2E
             PUTS    E2BMSG
+            JMP     :END
+
 :E2E        CMP     #$2E
             BNE     :E40
             PUTS    E2EMSG
+            JMP     :END
+
 :E40        CMP     #$40
             BNE     :E42
             PUTS    E40MSG
+            JMP     :END
+
 :E42        CMP     #$42
             BNE     :E43
             PUTS    E42MSG
+            JMP     :END
+
 :E43        CMP     #$43
             BNE     :E44
             PUTS    E43MSG
+            JMP     :END
+
 :E44        CMP     #$44
             BNE     :E45
             PUTS    E44MSG
+            JMP     :END
+
 :E45        CMP     #$45
             BNE     :E46
             PUTS    E45MSG
+            JMP     :END
+
 :E46        CMP     #$46
             BNE     :E47
             PUTS    E46MSG
+            JMP     :END
+
 :E47        CMP     #$47
             BNE     :E48
             PUTS    E47MSG
+            JMP     :END
+
 :E48        CMP     #$48
             BNE     :E49
             PUTS    E48MSG
+            JMP     :END
+
 :E49        CMP     #$49
             BNE     :E4A
             PUTS    E49MSG
+            JMP     :END
+
 :E4A        CMP     #$4A
             BNE     :E4B
             PUTS    E4AMSG
+            JMP     :END
+
 :E4B        CMP     #$4B
             BNE     :E4C
             PUTS    E4BMSG
+            JMP     :END
+
 :E4C        CMP     #$4C
             BNE     :E4D
             PUTS    E4CMSG
+            JMP     :END
+
 :E4D        CMP     #$4D
             BNE     :E4E
             PUTS    E4DMSG
+            JMP     :END
+
 :E4E        CMP     #$4E
             BNE     :E50
             PUTS    E4EMSG
+            JMP     :END
+
 :E50        CMP     #$50
             BNE     :E51
             PUTS    E50MSG
+            JMP     :END
+            
 :E51        CMP     #$51
             BNE     :E52
             PUTS    E51MSG
+            JMP     :END
+
 :E52        CMP     #$52
             BNE     :E53
             PUTS    E52MSG
+            JMP     :END
+
 :E53        CMP     #$53
             BNE     :E55
             PUTS    E53MSG
+            JMP     :END
+
 :E55        CMP     #$55
             BNE     :E56
             PUTS    E55MSG
+            JMP     :END
+            
 :E56        CMP     #$56
             BNE     :E57
             PUTS    E56MSG
+            JMP     :END
+
 :E57        CMP     #$57
             BNE     :E5A
             PUTS    E57MSG
+            JMP     :END
+
 :E5A        CMP     #$5A
             BNE     :E_UNK
             PUTS    E5AMSG
             JMP     :END
+
 :E_UNK      PUTS    E_UNK_MSG
             LDA     #":"
             JSR     COUT
