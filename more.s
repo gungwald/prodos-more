@@ -32,9 +32,14 @@ FREEBUFR       EQU   $BEF8      ;FREE BUFFER
 * PRODOS ENTRY POINT
 
 PRODOS_MLI     EQU   $BF00      ;MACHINE LANG IFACE (MLI)
-
-* MEMORY LOCATIONS
-
+*
+* MEMORY MAPPED I/O: $C000 - $CFFF
+*
+RD80VID        EQU   $C01F      ;<=128->40COL, >128->80COL
+*
+* SLOT 3 SCRATCHPAD RAM - TEXT PAGE 0 SCREEN HOLE
+* http://yesterbits.com/media/books/apple/heiserman-1983-intermediate-level-apple-ii-handbook.pdf
+*
 OURCH          EQU   $057B      ;80-COL HORIZ CURSOR POSITION
 OURCV          EQU   $05FB      ;VERTICAL CURSOR POSITION
 
@@ -166,11 +171,21 @@ MAIN           CLD              ;CLEAR DECIMAL FLG, AVOID CRASH
 *
 * GET FILE NAME
 *
-               PUTS  PROMPT
+               PUTS  INFOLINE
+               JSR   CROUT
+:ASKFILE       PUTS  PROMPT
                JSR   GETLN1     ;LENGTH IN X, CR AT END
                CPX   #0         ;IS THE LENGTH ZERO?
-               BNE   :CONT1     ;USER JUST PRESSED RETURN
-               JMP   END
+               BNE   :CONT0     ;USER JUST PRESSED RETURN
+               JMP   :END
+
+:CONT0         CPX   #1
+               BNE   :CONT1
+               LDA   #"?"
+               CMP   IN
+               BNE   :CONT1
+               JSR   HELPINFO
+               JMP   :ASKFILE
 :CONT1         CPIN  FILENAME   ;COPY "IN" BUF TO FILENAME
 
                DO    TRACE
@@ -184,7 +199,7 @@ MAIN           CLD              ;CLEAR DECIMAL FLG, AVOID CRASH
                JSR   GETBUFR    ;GET BUF FROM BASIC.SYSTEM
                BCC   :CONT2     ;CARRY CLEAR MEANS NO ERROR
                JSR   OBUFERR
-               JMP   END       
+               JMP   :END       
 :CONT2         STA   OBUFADDR+1 ;GETBUFR RETURNS HIBYTE IN A
                LDA   #0         ;PREPARE
                STA   OBUFADDR   ;LOBYTE IS 0 B/C ADDR OF PAGE
@@ -194,13 +209,14 @@ MAIN           CLD              ;CLEAR DECIMAL FLG, AVOID CRASH
                JSR   PRODOS_MLI
                DB    OPENCMD
                DA    OPENPRMS
-               BEQ   CONT3
+               BEQ   :CONT3
                JSR   OPENERR
-               JMP   :FREEOBUF
+               JSR   FREEBUFR   ;CLEAN UP BEFORE TRY AGAIN
+               JMP   :ASKFILE
 *
 * COPY FILE NUMBER FROM OPEN PARAMETERS TO READ AND CLOSE
 *
-CONT3          LDA   OPENFNUM
+:CONT3         LDA   OPENFNUM
                STA   READFNUM
                STA   CLOSFNUM
 *
@@ -208,10 +224,10 @@ CONT3          LDA   OPENFNUM
 *
                LDA   #1         ;ONE 256 BYTE BUFFER
                JSR   GETBUFR    ;CALL BASIC.SYSTEM SUB
-               BCC   CONT4
+               BCC   :CONT4
                JSR   RBUFERR    ;CARRY SET MEANS ERROR
                JMP   :CLOSFILE
-CONT4          STA   RBADDR+1   ;STORE HI-BYTE
+:CONT4         STA   RBADDR+1   ;STORE HI-BYTE
                STA   ZP_A1H     ;FOR 0-PAGE INDIRECTION
                LDA   #0         ;0 FOR LO-BYTE
                STA   RBADDR     ;STORE IT
@@ -224,7 +240,9 @@ CONT4          STA   RBADDR+1   ;STORE HI-BYTE
 * CLEANUP
 *
                JSR   FREEBUFR   ;FREE READ BUFFER
-
+*
+* Close file
+*
 :CLOSFILE      JSR   PRODOS_MLI ;CLOSE THE FILE
                DB    CLOSCMD
                DA    CLOSPRMS
@@ -232,7 +250,7 @@ CONT4          STA   RBADDR+1   ;STORE HI-BYTE
                JSR   CLOSERR
                
 :FREEOBUF      JSR   FREEBUFR   ;FREE OPEN I/O BUFFER
-END            NOP
+:END           NOP
                RTS
 
 ********************************
@@ -243,6 +261,25 @@ END            NOP
 
 ********************************
 *                              *
+* PROGRAM INFO AND HELP        *
+*                              *
+********************************
+HELPINFO       JSR   CROUT
+               PUTS  INFO0
+               JSR   CROUT
+               PUTS  INFO1
+               JSR   CROUT
+               PUTS  INFO2
+               JSR   CROUT
+               PUTS  INFO3
+               JSR   CROUT
+               PUTS  INFO4
+               JSR   CROUT
+               JSR   CROUT
+               RTS
+
+********************************
+*                              *
 * HANDLE ERROR WHEN OPENING    *
 * FILE                         *
 *                              *
@@ -250,8 +287,6 @@ END            NOP
 OPENERR        STA   ERRCODE
                PUTS  OERRMSG
                PUTS  FILENAME
-               LDA   #"'"
-               JSR   COUT
                LDA   #":"
                JSR   COUT
                LDA   ERRCODE
@@ -673,6 +708,12 @@ ERRPROC
 *                              *
 ********************************
 
+INFOLINE       STR   "ENTER [?] FOR PROGRAM INFO AND HELP"
+INFO0          STR   "MORE - PAGES THROUGH TEXT FILE"
+INFO1          STR   "COPYRIGHT (C) 2024 BILL CHATFIELD"
+INFO2          STR   "DISTRIBUTED UNDER THE GPL VERSION 3"
+INFO3          STR   "https://github.com/gungwald/prodos-more"
+INFO4          STR   "PRESS RETURN TO QUIT"
 PROMPT         STR   "FILE:"
 ERRTXT         STR   "ERROR:"
 FILENAME       DS    $FF
@@ -683,10 +724,10 @@ USRQUIT        DS    1
 BUFCHAR        DS    1
 USRCHAR        DS    1
 
-OERRMSG     STR     "FAILED TO OPEN FILE '"
-CERRMSG     STR     "FAILED TO CLOSE FILE '"
-RBERRMSG    STR     "REQUEST FOR READ BUFFER FAILED"
-OBERRMSG    STR     "REQUEST FOR OPEN BUFFER FAILED"
+OERRMSG     STR     "CANNOT OPEN "
+CERRMSG     STR     "CANNOT CLOSE "
+RBERRMSG    STR     "CANNOT CREATE READ BUFFER"
+OBERRMSG    STR     "CANNOT CREATE FILE BUFFER"
 
 E00MSG      STR     "NO ERROR"
 E01MSG      STR     "BAD SYSTEM CALL NUMBER"
