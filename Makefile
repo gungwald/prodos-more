@@ -24,7 +24,7 @@ endif
 # It is necessary to use this older version of AppleCommander to support
 # the PowerBook G4 and iBook G3. This version only requires Java 1.3.
 AC=java -jar AppleCommander-1.3.5-ac.jar
-SRC=more.s
+SRC=more.merlin.s
 PGM=MORE
 BASE_DSK=prodos-2.0.3.dsk
 VOL=$(PGM)
