@@ -20,68 +20,96 @@
 * $C000 - $CFFF	Soft Switches, Expansion Card I/O and ROM
 * $D000 - $F7FF	BASIC ROM (can be bankswitched later models)
 * $F800 - $FFFF	Machine Language Monitor ROM (also can be bankswitched)
+*
+* Branching
+*
+* CMP,CPX,CPY ->
+* Condition 	        N 	Z 	C
+* Register < Memory 	1 	0 	0
+* Register = Memory 	0 	1 	1
+* Register > Memory 	0 	0 	1 
+*
+* BPL - BRANCH PLUS (N=0) NOT NEGATIVE
+* BMI - BRANCH MINUS (N=1) NEGATIVE
+* BEQ - BRANCH EQUAL (Z=1) ZERO FLAG SET
+* BNE - BRANCH NOT EQUAL (Z=0) ZERO FLAG NOT SET
+* BCC - BRANCH CARRY CLEAR (C=0)
+* BCS - BRANCH CARRY SET (C=1)
+* BVC - BRANCH OVERVLOW CLEAR (V=0)
+* BVS - BRANCH OVERFLOW SET (V=1)
 
                DSK   MORE       ;WRITE ASSEMBLED FILE TO DISK
                TYP   $06        ;$FF=SYSTEM, $06=BINARY
                ORG   $2000      ;ASSEMBLE START ADDRESS
-
+*
 * SYSTEM VARIABLES
-
+*
+PTR            EQU   $06        ;ONLY FREE 0-PAGE LOCATION
+CH             EQU   $24        ;40-COL HORZ CURS POSITION
+CV             EQU   $25        ;40-COL VERT CURS POSITION
+PROMPT         EQU   $33        ;PROMPT CHARACTER
+ZP_A1L         EQU   $3C        ;MONITOR GENERAL PURPOSE
+ZP_A1H         EQU   $3D        ;MONITOR GENERAL PURPOSE
 IN             EQU   $200       ;256-CHAR INPUT BUF
-
-* SUBROUTINES IN MONITOR ROM: $F800 - $FFFF
-
-RDKEY          EQU   $FD0C      ;READS A CHARACTER
-GETLN          EQU   $FD6A      ;READS A LINE, WITH PROMPT($33)
-GETLN1         EQU   $FD6F      ;READS A LINE, NO PROMPT
-CROUT          EQU   $FD8E
-COUT           EQU   $FDED
-PRBYTE         EQU   $FDDA
-
-* SUBROUTINES IN BASIC.SYSTEM ROM:
-
-GETBUFR        EQU   $BEF5      ;BCC=OKAY & A=HIBYTE OF BUF
-                                ;BCS=FAIL & A=ERRCODE
-                                ;X & Y ARE DESTROYED
-FREEBUFR       EQU   $BEF8      ;FREE BUFFER
-
-* PRODOS ENTRY POINT
-
-PRODOS_MLI     EQU   $BF00      ;MACHINE LANG IFACE (MLI)
-*
-* MEMORY MAPPED I/O: $C000 - $CFFF
-*
-RD80VID        EQU   $C01F      ;<=128->40COL, >128->80COL
 *
 * SLOT 3 SCRATCHPAD RAM - TEXT PAGE 0 SCREEN HOLE
 * http://yesterbits.com/media/books/apple/heiserman-1983-intermediate-level-apple-ii-handbook.pdf
 *
 OURCH          EQU   $057B      ;80-COL HORIZ CURSOR POSITION
 OURCV          EQU   $05FB      ;VERTICAL CURSOR POSITION
-
-* ZERO-PAGE ADDRESSES
-
-ZP_A1L         EQU   $3C        ;MONITOR GENERAL PURPOSE
-ZP_A1H         EQU   $3D        ;MONITOR GENERAL PURPOSE
-
+*
+* SUBROUTINES IN MONITOR ROM: $F800 - $FFFF
+*
+RDKEY          EQU   $FD0C      ;READS A CHARACTER
+GETLN          EQU   $FD6A      ;READS A LINE, WITH PROMPT($33)
+GETLN1         EQU   $FD6F      ;READS A LINE, NO PROMPT
+CROUT          EQU   $FD8E
+COUT           EQU   $FDED
+PRBYTE         EQU   $FDDA
+*
+* SUBROUTINES IN BASIC.SYSTEM ROM:
+*
+GETBUFR        EQU   $BEF5      ;BCC=OKAY & A=HIBYTE OF BUF
+                                ;BCS=FAIL & A=ERRCODE
+                                ;X & Y ARE DESTROYED
+FREEBUFR       EQU   $BEF8      ;FREE BUFFER
+*
+* PRODOS ENTRY POINT
+*
+PRODOS_MLI     EQU   $BF00      ;MACHINE LANG IFACE (MLI)
+*
+* MEMORY MAPPED I/O: $C000 - $CFFF
+*
+RD80VID        EQU   $C01F      ;<=128->40COL, >128->80COL
+*
 * PRODOS COMMAND CODES
-
-OPENCMD        EQU   $C8
-READCMD        EQU   $CA
-CLOSCMD        EQU   $CC
-
-* CONSTANTS
-
-EOFERR         EQU   $4C        ;ERROR CODE FOR END-OF-FILE
-PTR            EQU   $06        ;ONLY FREE 0-PAGE LOCATION
-MAXERCDE       EQU   $5A        ;LARGEST ERROR CODE
+*
+GET_PREFIX     EQU   $C7
+OPEN           EQU   $C8
+READ           EQU   $CA
+CLOSE          EQU   $CC
+*
+* PRODOS MLI PARAMETER COUNTS
+*
+GETPRFXPARMCNT EQU  1
+OPENPARMCNT    EQU  3
+READPARMCNT    EQU  4
+CLOSEPARMCNT   EQU  1
+*
+* ASCII
+*
 CR             EQU   $0D        ;ASCII CARRIAGE RETURN
 CR_HIBIT       EQU   $8D        ;CARRIAGE RET WITH HIGH BIT SET
+*
+* CONSTANTS
+*
+EOFERR         EQU   $4C        ;ERROR CODE FOR END-OF-FILE
+MAXERCDE       EQU   $5A        ;LARGEST ERROR CODE
 BUFSIZE        EQU   $00FF
 SCR_HGHT       EQU   24         ;SCREEN HEIGHT
-
+*
 * DEBUGGING
-
+*
 TRACE          EQU   0
 
 ********************************
@@ -182,14 +210,32 @@ SET23          MAC
 *                              *
 ********************************
 
-MAIN           CLD              ;CLEAR DECIMAL FLG, AVOID CRASH
-               SET0  USRQUIT    ;INITIALIZE TO "NO"
+MAIN           CLD                  ;CLEAR DECIMAL FLG, AVOID CRASH
+               SET0  USRQUIT        ;INITIALIZE TO "NO"
+               JSR   GET_SCRN_WDTH
+*
+* GET PREFIX TO SEE IF IT IS SET
+*
+               JSR   PRODOS_MLI
+               DB    GET_PREFIX
+               DA    GETPRFXPARMS
+               BEQ   :CHKPREFIX
+               JSR   GETPRFXERR
+               JMP   :END
+:CHKPREFIX     LDA   PREFIX
+               CMP   #0
+               BNE   :GETFILE
+               JSR   CROUT
+               PUTS  WARNING
+               PUTS  NOPREFIXMSG
+               JSR   CROUT
+               JSR   CROUT
 *
 * GET FILE NAME
 *
-               PUTS  INFOLINE
+:GETFILE       PUTS  INFOLINE
                JSR   CROUT
-:ASKFILE       PUTS  PROMPT
+:ASKFILE       PUTS  FILEPROMPT
                JSR   GETLN1     ;LENGTH IN X, CR AT END
                CPX   #0         ;IS THE LENGTH ZERO?
                BNE   :CONT0     ;USER JUST PRESSED RETURN
@@ -223,8 +269,8 @@ MAIN           CLD              ;CLEAR DECIMAL FLG, AVOID CRASH
 * OPEN FILE
 *
                JSR   PRODOS_MLI
-               DB    OPENCMD
-               DA    OPENPRMS
+               DB    OPEN
+               DA    OPENPARMS
                BEQ   :CONT3
                JSR   OPENERR
                JSR   FREEBUFR   ;CLEAN UP BEFORE TRY AGAIN
@@ -260,8 +306,8 @@ MAIN           CLD              ;CLEAR DECIMAL FLG, AVOID CRASH
 * Close file
 *
 :CLOSFILE      JSR   PRODOS_MLI ;CLOSE THE FILE
-               DB    CLOSCMD
-               DA    CLOSPRMS
+               DB    CLOSE  
+               DA    CLOSEPARMS
                BEQ   :FREEOBUF
                JSR   CLOSERR
                
@@ -274,6 +320,23 @@ MAIN           CLD              ;CLEAR DECIMAL FLG, AVOID CRASH
 * END OF MAIN - PROGRAM EXIT   *
 *                              *
 ********************************
+
+********************************
+*                              *
+* DETERMINE IF SCREEN IS IN    *
+* 40 COL OR 80 COL MODE        *
+*                              *
+********************************
+GET_SCRN_WDTH   LDA     #128
+                CMP     RD80VID         ;RD80VID <= 128 -> 40 COL
+                BPL     :EIGHTY_COLUMNS ;128 < RD80VID  -> 80 COL
+                LDA     #40
+                STA     SCR_WDTH
+                JMP     :END
+:EIGHTY_COLUMNS LDA     #80
+                STA     SCR_WDTH
+:END            NOP
+                RTS
 
 ********************************
 *                              *
@@ -292,6 +355,20 @@ HELPINFO       JSR   CROUT
                PUTS  INFO4
                JSR   CROUT
                JSR   CROUT
+               RTS
+
+********************************
+*                              *
+* HANDLE ERROR WHEN GETTING    *
+* PREFIX                       *
+*                              *
+********************************
+GETPRFXERR     STA   ERRCODE
+               PUTS  GETPRFXERRMSG
+               LDA   #":"
+               JSR   COUT
+               LDA   ERRCODE
+               JSR   ERRPROC
                RTS
 
 ********************************
@@ -387,8 +464,7 @@ PRINT_IN
 * PRINT STRING BYTES           *
 *                              *
 ********************************
-PRSTRBYTES
-            PUSHY
+PRSTRBYTES  PUSHY
             LDY     #0
 :LOOP       CPY     #255
             BEQ     :ENDLOOP
@@ -414,9 +490,10 @@ VIEWFILE
                FIN
 
                SET1  LINENUM    ;INIT LINE NUMBER
+               SET1  LINEIDX    ;POSITION IN LINE
 :LOOP          JSR   PRODOS_MLI ;CALL PRODOS TO READ FILE
-               DB    READCMD    ;SPECIFY PRODOS READ COMMAND
-               DA    READPRMS   ;READ PARAMETERS
+               DB    READ       ;SPECIFY PRODOS READ COMMAND
+               DA    READPARMS  ;READ PARAMETERS
                BNE   :READERR 
                JSR   WRITEBUF   ;WRITE TO SCREEN WHAT WAS READ
                LDA   #1         ;PREPARE FOR NEXT OP
@@ -433,14 +510,13 @@ VIEWFILE
 *                              *
 ********************************
 
-WRITEBUF
-               PUSHY
+WRITEBUF       PUSHY
                LDY   #0         ;INIT CHAR COUNTER VARIABLE
 :LOOP          CPY   READCNT    ;COMPARE TO MAX CHARS
                BEQ   :ENDLOOP
                LDA   (ZP_A1L),Y ;GET CHAR FROM BUFFER
                ORA   #%10000000 ;TURN ON HIGH BIT FOR PRINTING
-               JSR   COUT       ;COUT PRESERVES ACCUM
+               JSR   WRITECHAR  ;COUT PRESERVES ACCUM
 *
 * CHECK END OF LINE
 *
@@ -467,6 +543,28 @@ WRITEBUF
                FIN
 
                RTS
+
+********************************
+*                              *
+* WRITE CHAR TO SCREEN         *
+* CLIPS TO SCREEN WIDTH        *
+* PRESERVES ACCUMULATOR        *
+*                              *
+********************************
+WRITECHAR   STA     CHAR
+            LDA     LINEIDX
+            CMP     SCR_WDTH    ;COMPARE WITH SCREEN WIDTH
+            BPL     :OFF_SCR    ;DON'T PRINT IF OFF SCREEN
+            LDA     CHAR
+            JSR     COUT
+            JMP     :DONE
+:OFF_SCR    INC     LINEIDX     ;TODO - THIS IS WRONG!
+            LDA     CHAR
+            CMP     #CR_HIBIT
+            BNE     :DONE
+            JSR     CROUT
+:DONE       LDA     CHAR
+            RTS
 
 ********************************
 *                              *
@@ -508,8 +606,11 @@ STATBAR
                SET23 LINENUM
                JMP   :ENDLOOP
 :CHKQUIT       CMP   #"Q"       ;USER WANTS TO QUIT
-               BNE   :LOOP      ;NO RECOGNIZED INPUT
-               SET1  USRQUIT
+               BEQ   :QUITTING  ;NO RECOGNIZED INPUT
+               CMP   #"q"
+               BEQ   :QUITTING
+               JMP   :LOOP
+:QUITTING      SET1  USRQUIT
 :ENDLOOP       JSR   ERASEBAR
                POPY
 
@@ -730,16 +831,24 @@ INFO1          STR   "COPYRIGHT (C) 2024 BILL CHATFIELD"
 INFO2          STR   "DISTRIBUTED UNDER THE GPL VERSION 3"
 INFO3          STR   "https://github.com/gungwald/prodos-more"
 INFO4          STR   "PRESS RETURN TO QUIT"
-PROMPT         STR   "FILE:"
+FILEPROMPT     STR   "FILE:"
 ERRTXT         STR   "ERROR:"
 FILENAME       DS    $FF
+PREFIX         DS    64
 ERRCODE        DS    1
 LINENUM        DS    1
+LINEIDX        DS    1
+CHAR           DS    1
 BAR            STR   '[RET] LINE  [SPC] PAGE  [Q]UIT'
 USRQUIT        DS    1
 BUFCHAR        DS    1
 USRCHAR        DS    1
+SCR_WDTH       DS    1
 
+PREFIXMSG   STR     "THE PREFIX IS "
+WARNING     STR     'WARNING'
+NOPREFIXMSG STR     ": NO PREFIX IS SET. YOU MUST ENTER THE FULL PATH TO THE FILE."
+GETPRFXERRMSG STR   "CANNOT GET PREFIX"
 OERRMSG     STR     "CANNOT OPEN "
 CERRMSG     STR     "CANNOT CLOSE "
 RBERRMSG    STR     "CANNOT CREATE READ BUFFER"
@@ -785,16 +894,21 @@ EXSTATB        STR   'EXITING STATUSBAR'
 ENERASEB       STR   'ENTERING ERASEBAR'
 EXERASEB       STR   'EXITING ERASEBAR'
 *
+* GET_PREFIX PARAMETERS
+*
+GETPRFXPARMS   DB    #GETPRFXPARMCNT
+PREFIXADDR     DA    PREFIX
+*
 * OPEN PARAMETERS
 *
-OPENPRMS       DB    3
+OPENPARMS      DB    #OPENPARMCNT
                DA    FILENAME
 OBUFADDR       DS    2
 OPENFNUM       DS    1
 *
 * READ PARAMETERS
 *
-READPRMS       DB    4
+READPARMS      DB    #READPARMCNT
 READFNUM       DS    1
 RBADDR         DS    2
 REQCNT         DW    BUFSIZE
@@ -802,7 +916,7 @@ READCNT        DS    2
 *
 * CLOSE PARAMETERS
 *
-CLOSPRMS       DB    1
+CLOSEPARMS     DB    #CLOSEPARMCNT
 CLOSFNUM       DS    1
 *
 * BUFFERS
