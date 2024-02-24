@@ -206,6 +206,21 @@ SET23          MAC
 
 ********************************
 *                              *
+* STANDARD ASSEM LANG          *
+* BACKWARDS COPY OF 1 BYTE     *
+* A IS DESTROYED               *
+* ]1 DESTINATION               *
+* ]2 SOURCE                    *
+*                              *
+********************************
+
+COPY_B      MAC
+            LDA     ]2
+            STA     ]1
+            <<<
+
+********************************
+*                              *
 * MAIN PROGRAM                 *
 *                              *
 ********************************
@@ -485,24 +500,23 @@ PRSTRBYTES  PUSHY
 ********************************
 
 VIEWFILE
-               DO    TRACE
-               PUTS  ENVIEW
-               FIN
-
-               SET1  LINENUM    ;INIT LINE NUMBER
-               SET1  LINEIDX    ;POSITION IN LINE
-:LOOP          JSR   PRODOS_MLI ;CALL PRODOS TO READ FILE
-               DB    READ       ;SPECIFY PRODOS READ COMMAND
-               DA    READPARMS  ;READ PARAMETERS
-               BNE   :READERR 
-               JSR   WRITEBUF   ;WRITE TO SCREEN WHAT WAS READ
-               LDA   #1         ;PREPARE FOR NEXT OP
-               CMP   USRQUIT    ;IF USER WANTS TO QUIT, THEN
-               BEQ   :ENDLOOP   ;EXIT THE LOOP
-               JMP   :LOOP      ;ELSE, GET THE NEXT BUFFER
-:READERR       JSR   ERRPROC
-:ENDLOOP       NOP
-               RTS
+            DO    TRACE
+            PUTS  ENVIEW
+            FIN
+            
+            COPY_B  LINEIDX;#1  ;POSITION IN LINE
+:LOOP       JSR     PRODOS_MLI  ;CALL PRODOS TO READ FILE
+            DB      READ        ;SPECIFY PRODOS READ COMMAND
+            DA      READPARMS   ;READ PARAMETERS
+            BNE     :READERR 
+            JSR     WRITEBUF    ;WRITE TO SCREEN WHAT WAS READ
+            LDA     #1          ;PREPARE FOR NEXT OP
+            CMP     USRQUIT     ;IF USER WANTS TO QUIT, THEN
+            BEQ     :ENDLOOP    ;EXIT THE LOOP
+            JMP     :LOOP       ;ELSE, GET THE NEXT BUFFER
+:READERR    JSR     ERRPROC
+:ENDLOOP    NOP
+            RTS
 
 ********************************
 *                              *
@@ -510,39 +524,33 @@ VIEWFILE
 *                              *
 ********************************
 
-WRITEBUF       PUSHY
-               LDY   #0         ;INIT CHAR COUNTER VARIABLE
-:LOOP          CPY   READCNT    ;COMPARE TO MAX CHARS
-               BEQ   :ENDLOOP
-               LDA   (ZP_A1L),Y ;GET CHAR FROM BUFFER
-               ORA   #%10000000 ;TURN ON HIGH BIT FOR PRINTING
-               JSR   WRITECHAR  ;COUT PRESERVES ACCUM
-*
-* CHECK END OF LINE
-*
-               CMP   #CR_HIBIT  ;COMPARE TO CARRIAGE RETURN
-               BNE   :CONT      ;IF NOT END OF LINE, NEXT CHAR
-               INC   LINENUM    ;NEXT LINE HAS BEEN REACHED
+WRITEBUF    PUSHY
+            LDY     #0          ;INIT CHAR COUNTER VARIABLE
+:LOOP       CPY     READCNT     ;COMPARE TO MAX CHARS
+            BEQ     :ENDLOOP
+            LDA     (ZP_A1L),Y  ;GET CHAR FROM BUFFER
+            ORA     #%10000000  ;TURN ON HIGH BIT FOR PRINTING
+            JSR     WRITECHAR   ;COUT PRESERVES ACCUM
 *
 * CHECK AT END OF PAGE
 *
-               LDA   LINENUM
-               CMP   #SCR_HGHT  ;AT BOTTOM OF SCREEN?
-               BNE   :CONT      ;NO? THEN NEXT CHAR
-               JSR   STATBAR    ;YES? THEN SHOW THE STATUS BAR
-               LDA   #1         ;SETUP FOR NEXT LINE
-               CMP   USRQUIT    ;DID USER ASK TO QUIT
-               BEQ   :ENDLOOP   ;YES? THEN END SUB
-:CONT          INY              ;STATBAR HAS ADJUSTED LINENUM
-               JMP   :LOOP
-:ENDLOOP       NOP
-               POPY
+            LDA     CV          ;CURSOR VERTICAL SCREEN LINE
+            CMP     #SCR_HGHT   ;AT BOTTOM OF SCREEN?
+            BNE     :CONT       ;NO? THEN NEXT CHAR
+            JSR     STATBAR     ;YES? THEN SHOW THE STATUS BAR
+            LDA     #1          ;SETUP FOR NEXT LINE
+            CMP     USRQUIT     ;DID USER ASK TO QUIT
+            BEQ     :ENDLOOP    ;YES? THEN END SUB
+:CONT       INY                 ;STATBAR HAS ADJUSTED LINENUM
+            JMP     :LOOP
+:ENDLOOP    NOP
+            POPY
 
-               DO    TRACE
-               PUTS  EXWRITEBUF
-               FIN
+            DO      TRACE
+            PUTS    EXWRITEBUF
+            FIN
 
-               RTS
+            RTS
 
 ********************************
 *                              *
@@ -551,19 +559,19 @@ WRITEBUF       PUSHY
 * PRESERVES ACCUMULATOR        *
 *                              *
 ********************************
-WRITECHAR   STA     CHAR
-            LDA     LINEIDX
+WRITECHAR   STA     CHAR        ;DON'T LOOSE THE CHARACTER
+            CMP     #CR_HIBIT   ;COMPARE TO CARRIAGE RETURN
+            BNE     :NOT_EOL    ;IF NOT END OF LINE, PRINT
+            INC     CV          ;FORCE DOWN 1 LINE ON SCREEN
+            COPY_B  LINEIDX;#1  ;RESET TO BEGINNING OF LINE
+            JMP     :ENDSUB     ;NOTHING MORE TO DO FOR EOL
+:NOT_EOL    LDA     LINEIDX     ;GET CURSOR HORIZ COL
             CMP     SCR_WDTH    ;COMPARE WITH SCREEN WIDTH
-            BPL     :OFF_SCR    ;DON'T PRINT IF OFF SCREEN
-            LDA     CHAR
+            BPL     :ENDSUB     ;DON'T PRINT IF OFF SCREEN
+            LDA     CHAR        ;ON SCREEN, SO PRINT IT
             JSR     COUT
-            JMP     :DONE
-:OFF_SCR    INC     LINEIDX     ;TODO - THIS IS WRONG!
-            LDA     CHAR
-            CMP     #CR_HIBIT
-            BNE     :DONE
-            JSR     CROUT
-:DONE       LDA     CHAR
+            INC     LINEIDX
+:ENDSUB     LDA     CHAR
             RTS
 
 ********************************
@@ -640,7 +648,7 @@ ERASEBAR
                JSR   COUT       ;WRITE TO SCREEN
                INY              ;MAKE PROGRESS
                JMP   :LOOP      ;LOOP TO NEXT CHAR
-:ENDLOOP       SET0  OURCH      ;RESET CURSON TO BEG OF LINE
+:ENDLOOP       SET0  OURCH      ;RESET CURSOR TO BEG OF LINE
                POPY
 
                DO    TRACE
