@@ -38,79 +38,80 @@
 * BVC - BRANCH OVERVLOW CLEAR (V=0)
 * BVS - BRANCH OVERFLOW SET (V=1)
 
-               DSK   MORE       ;WRITE ASSEMBLED FILE TO DISK
-               TYP   $06        ;$FF=SYSTEM, $06=BINARY
-               ORG   $2000      ;ASSEMBLE START ADDRESS
+                DSK     MORE        ;WRITE ASSEMBLED FILE TO DISK
+                TYP     $06         ;$FF=SYSTEM, $06=BINARY
+                ORG     $2000       ;ASSEMBLE START ADDRESS
 *
 * SYSTEM VARIABLES
 *
-PTR            EQU   $06        ;ONLY FREE 0-PAGE LOCATION
-CH             EQU   $24        ;40-COL HORZ CURS POSITION
-CV             EQU   $25        ;40-COL VERT CURS POSITION
-PROMPT         EQU   $33        ;PROMPT CHARACTER
-ZP_A1L         EQU   $3C        ;MONITOR GENERAL PURPOSE
-ZP_A1H         EQU   $3D        ;MONITOR GENERAL PURPOSE
-IN             EQU   $200       ;256-CHAR INPUT BUF
+PTR             EQU     06          ;ONLY FREE 0-PAGE LOCATION
+CH              EQU     $24         ;40-COL HORZ CURS POSITION
+CV              EQU     $25         ;40-COL VERT CURS POSITION
+PROMPT          EQU     $33         ;PROMPT CHARACTER
+ZP_A1L          EQU     $3C         ;MONITOR GENERAL PURPOSE
+ZP_A1H          EQU     $3D         ;MONITOR GENERAL PURPOSE
+IN              EQU     $200        ;256-CHAR INPUT BUF
 *
 * SLOT 3 SCRATCHPAD RAM - TEXT PAGE 0 SCREEN HOLE
 * http://yesterbits.com/media/books/apple/heiserman-1983-intermediate-level-apple-ii-handbook.pdf
 *
-OURCH          EQU   $057B      ;80-COL HORIZ CURSOR POSITION
-OURCV          EQU   $05FB      ;VERTICAL CURSOR POSITION
+OURCH           EQU     $057B       ;80-COL HORIZ CURSOR POSITION
+OURCV           EQU     $05FB       ;VERTICAL CURSOR POSITION
 *
 * SUBROUTINES IN MONITOR ROM: $F800 - $FFFF
 *
-RDKEY          EQU   $FD0C      ;READS A CHARACTER
-GETLN          EQU   $FD6A      ;READS A LINE, WITH PROMPT($33)
-GETLN1         EQU   $FD6F      ;READS A LINE, NO PROMPT
-CROUT          EQU   $FD8E
-COUT           EQU   $FDED
-PRBYTE         EQU   $FDDA
+CR              EQU     $FC62       ;CURSOR TO BEG OF NEXT LINE
+RDKEY           EQU     $FD0C       ;READS A CHARACTER
+GETLN           EQU     $FD6A       ;READS A LINE, WITH PROMPT($33)
+GETLN1          EQU     $FD6F       ;READS A LINE, NO PROMPT
+CROUT           EQU     $FD8E
+COUT            EQU     $FDED
+PRBYTE          EQU     $FDDA
 *
 * SUBROUTINES IN BASIC.SYSTEM ROM:
 *
-GETBUFR        EQU   $BEF5      ;BCC=OKAY & A=HIBYTE OF BUF
-                                ;BCS=FAIL & A=ERRCODE
-                                ;X & Y ARE DESTROYED
-FREEBUFR       EQU   $BEF8      ;FREE BUFFER
+GETBUFR         EQU     $BEF5       ;BCC=OKAY & A=HIBYTE OF BUF
+                                    ;BCS=FAIL & A=ERRCODE
+                                    ;X & Y ARE DESTROYED
+FREEBUFR        EQU     $BEF8       ;FREE BUFFER
 *
 * PRODOS ENTRY POINT
 *
-PRODOS_MLI     EQU   $BF00      ;MACHINE LANG IFACE (MLI)
+PRODOS_MLI      EQU     $BF00       ;MACHINE LANG IFACE (MLI)
 *
 * MEMORY MAPPED I/O: $C000 - $CFFF
 *
-RD80VID        EQU   $C01F      ;<=128->40COL, >128->80COL
+RD80VID         EQU     $C01F       ;<=128->40COL, >128->80COL
 *
 * PRODOS COMMAND CODES
 *
-GET_PREFIX     EQU   $C7
-OPEN           EQU   $C8
-READ           EQU   $CA
-CLOSE          EQU   $CC
+GET_PREFIX      EQU     $C7
+OPEN            EQU     $C8
+READ            EQU     $CA
+CLOSE           EQU     $CC
 *
 * PRODOS MLI PARAMETER COUNTS
 *
-GETPRFXPARMCNT EQU  1
-OPENPARMCNT    EQU  3
-READPARMCNT    EQU  4
-CLOSEPARMCNT   EQU  1
+GETPRFXPARMCNT  EQU     1
+OPENPARMCNT     EQU     3
+READPARMCNT     EQU     4
+CLOSEPARMCNT    EQU     1
 *
 * ASCII
 *
-CR             EQU   $0D        ;ASCII CARRIAGE RETURN
-CR_HIBIT       EQU   $8D        ;CARRIAGE RET WITH HIGH BIT SET
+CR_CHAR         EQU     $0D         ;ASCII CARRIAGE RETURN
+CR_HIBIT        EQU     $8D         ;CARRIAGE RET WITH HIGH BIT SET
 *
 * CONSTANTS
 *
-EOFERR         EQU   $4C        ;ERROR CODE FOR END-OF-FILE
-MAXERCDE       EQU   $5A        ;LARGEST ERROR CODE
-BUFSIZE        EQU   $00FF
-SCR_HGHT       EQU   24         ;SCREEN HEIGHT
+EOFERR          EQU     $4C         ;ERROR CODE FOR END-OF-FILE
+MAXERCDE        EQU     $5A         ;LARGEST ERROR CODE
+BUFSIZE         EQU     $00FF
+SCR_HGHT        EQU     24          ;SCREEN HEIGHT
 *
 * DEBUGGING
 *
-TRACE          EQU   0
+TRACE           EQU     0
 
 ********************************
 *                              *
@@ -153,7 +154,7 @@ CPIN           MAC
 LOOP           CPY   ]1         ;COMPARE Y WITH LENGTH BYTE
                BEQ   ENDLOOP    ;DONE IF LENGTH IS REACHED
                LDA   IN,Y       ;LOAD IN[Y] INTO ACCUMULATOR
-               CMP   #CR        ;COMPARE WITH CARRIAGE RETURN
+               CMP   #CR_CHAR   ;COMPARE WITH CARRIAGE RETURN
                BEQ   ENDLOOP    ;STOP AT CARRIAGE RETURN
                INY              ;DEST STR IS 1 AHEAD OF IN BUF
                STA   ]1,Y       ;COPY CHAR TO DEST STR ]1
@@ -350,6 +351,7 @@ GET_SCRN_WDTH   LDA     #128
                 JMP     :END
 :EIGHTY_COLUMNS LDA     #80
                 STA     SCR_WDTH
+                JSR     PRBYTE
 :END            NOP
                 RTS
 
@@ -504,6 +506,7 @@ VIEWFILE
             PUTS  ENVIEW
             FIN
             
+            COPY_B  SCRNLINE;#1 ;INIT SCREEN LINE NUMBER
             COPY_B  LINEIDX;#1  ;POSITION IN LINE
 :LOOP       JSR     PRODOS_MLI  ;CALL PRODOS TO READ FILE
             DB      READ        ;SPECIFY PRODOS READ COMMAND
@@ -534,7 +537,7 @@ WRITEBUF    PUSHY
 *
 * CHECK AT END OF PAGE
 *
-            LDA     CV          ;CURSOR VERTICAL SCREEN LINE
+            LDA     SCRNLINE    ;CURSOR VERTICAL SCREEN LINE
             CMP     #SCR_HGHT   ;AT BOTTOM OF SCREEN?
             BNE     :CONT       ;NO? THEN NEXT CHAR
             JSR     STATBAR     ;YES? THEN SHOW THE STATUS BAR
@@ -556,22 +559,30 @@ WRITEBUF    PUSHY
 *                              *
 * WRITE CHAR TO SCREEN         *
 * CLIPS TO SCREEN WIDTH        *
-* PRESERVES ACCUMULATOR        *
 *                              *
 ********************************
 WRITECHAR   STA     CHAR        ;DON'T LOOSE THE CHARACTER
             CMP     #CR_HIBIT   ;COMPARE TO CARRIAGE RETURN
             BNE     :NOT_EOL    ;IF NOT END OF LINE, PRINT
-            INC     CV          ;FORCE DOWN 1 LINE ON SCREEN
-            COPY_B  LINEIDX;#1  ;RESET TO BEGINNING OF LINE
+            JSR     DOWN1LINE
             JMP     :ENDSUB     ;NOTHING MORE TO DO FOR EOL
 :NOT_EOL    LDA     LINEIDX     ;GET CURSOR HORIZ COL
             CMP     SCR_WDTH    ;COMPARE WITH SCREEN WIDTH
-            BPL     :ENDSUB     ;DON'T PRINT IF OFF SCREEN
+            BPL     :FORWARD    ;DON'T PRINT IF OFF SCREEN
             LDA     CHAR        ;ON SCREEN, SO PRINT IT
             JSR     COUT
-            INC     LINEIDX
-:ENDSUB     LDA     CHAR
+:FORWARD    INC     LINEIDX
+:ENDSUB     RTS
+
+********************************
+*                              *
+* GO TO BEGINNING OF NEXT LINE *
+*                              *
+********************************
+DOWN1LINE   INC     SCRNLINE    ;KEEP TRACK OF LINE NUMBER
+            COPY_B  LINEIDX;#1  ;RESET TO BEGINNING OF LINE
+            ;COPY_B  OURCH;#0
+            JSR     CROUT       ;LINE DOWN & SCROLL IF NEEDED
             RTS
 
 ********************************
@@ -607,11 +618,11 @@ STATBAR
 :LOOP          JSR   RDKEY      ;GET A KEY FROM THE USER
                CMP   #" "       ;CHECK IF SPACE ENTERED
                BNE   :CHKCR     ;IF NOT FORWARD TO NEXT CHECK
-               SET1  LINENUM    ;ADVANCE ONE PAGE, STORE 1
+               SET1  SCRNLINE   ;ADVANCE ONE PAGE, STORE 1
                JMP   :ENDLOOP   ;PROCESSED SPACE SO DONE
 :CHKCR         CMP   #CR_HIBIT  ;CHECK FOR CARRIAGE RETURN
                BNE   :CHKQUIT
-               SET23 LINENUM
+               SET23 SCRNLINE
                JMP   :ENDLOOP
 :CHKQUIT       CMP   #"Q"       ;USER WANTS TO QUIT
                BEQ   :QUITTING  ;NO RECOGNIZED INPUT
@@ -844,7 +855,7 @@ ERRTXT         STR   "ERROR:"
 FILENAME       DS    $FF
 PREFIX         DS    64
 ERRCODE        DS    1
-LINENUM        DS    1
+SCRNLINE       DS    1
 LINEIDX        DS    1
 CHAR           DS    1
 BAR            STR   '[RET] LINE  [SPC] PAGE  [Q]UIT'
