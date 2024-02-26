@@ -81,7 +81,14 @@ PRODOS_MLI      EQU     $BF00       ;MACHINE LANG IFACE (MLI)
 *
 * MEMORY MAPPED I/O: $C000 - $CFFF
 *
+KBD             EQU     $C000       ;KEYBOARD DATA AND STROBE
+CXROMOFF        EQU     $C006       ;SELECT SLOT ROMS
+CXROMON         EQU     $C007       ;SELECT INTERNAL ROM
+KBDSTRB         EQU     $C010       ;CLEAR KEYBOARD STROBE
+ALTCHAR         EQU     $C01E       ;CHARACTER SET STATUS
 RD80VID         EQU     $C01F       ;<=128->40COL, >128->80COL
+INVERT          EQU     $CEDD       ;INVERT CHARACTER ON SCREEN
+PICK            EQU     $CF01       ;PICK CHARACTER OFF SCREEN
 *
 * PRODOS COMMAND CODES
 *
@@ -343,16 +350,19 @@ MAIN           CLD                  ;CLEAR DECIMAL FLG, AVOID CRASH
 * 40 COL OR 80 COL MODE        *
 *                              *
 ********************************
-GET_SCRN_WDTH   LDA     #128
+GET_SCRN_WDTH   LDA     #128            ;USE ALTCHARSET STATUS TO
+                BIT     ALTCHAR         ;SEE IF 80-COL CARD TURNED ON
+                BMI     :CARD_ACTIVE    ;A 1 IN BIT 7 MEANS ACTIVE
+                JMP     :FORTY_COL      ;IF CARD NOT ACTIVE THEN
+:CARD_ACTIVE    LDA     #128            ;SEE IF CARD IS IN 40/80 MODE
                 CMP     RD80VID         ;RD80VID <= 128 -> 40 COL
                 BPL     :EIGHTY_COLUMNS ;128 < RD80VID  -> 80 COL
-                LDA     #40
+:FORTY_COL      LDA     #40
                 STA     SCR_WDTH
                 JMP     :END
 :EIGHTY_COLUMNS LDA     #80
                 STA     SCR_WDTH
-                JSR     PRBYTE
-:END            NOP
+:END            JSR     PRBYTE
                 RTS
 
 ********************************
