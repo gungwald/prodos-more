@@ -350,19 +350,32 @@ MAIN           CLD                  ;CLEAR DECIMAL FLG, AVOID CRASH
 * 40 COL OR 80 COL MODE        *
 *                              *
 ********************************
-GET_SCRN_WDTH   LDA     #128            ;USE ALTCHARSET STATUS TO
+GET_SCRN_WDTH   LDA     #%10000000      ;USE ALTCHARSET STATUS TO
                 BIT     ALTCHAR         ;SEE IF 80-COL CARD TURNED ON
-                BMI     :CARD_ACTIVE    ;A 1 IN BIT 7 MEANS ACTIVE
-                JMP     :FORTY_COL      ;IF CARD NOT ACTIVE THEN
-:CARD_ACTIVE    LDA     #128            ;SEE IF CARD IS IN 40/80 MODE
-                CMP     RD80VID         ;RD80VID <= 128 -> 40 COL
-                BPL     :EIGHTY_COLUMNS ;128 < RD80VID  -> 80 COL
-:FORTY_COL      LDA     #40
+                BMI     :CARD_ACTIVE    ;BIT 7 ON = NEG & CARD ACTIVE
+                JMP     :FORTY_COLUMNS  ;INACTIVE CARD IS 40-COL
+:CARD_ACTIVE    LDA     #%10000000      ;SEE IF CARD IS IN 40/80 MODE
+                BIT     RD80VID         ;BIT 7 OFF = 0 OR >0 & 40-COL
+                BMI     :EIGHTY_COLUMNS ;BIT 7 ON = NEG & 80-COL MODE
+:FORTY_COLUMNS  LDA     #40
                 STA     SCR_WDTH
                 JMP     :END
 :EIGHTY_COLUMNS LDA     #80
                 STA     SCR_WDTH
-:END            JSR     PRBYTE
+:END            
+                DO      TRACE
+                LDA     ALTCHAR
+                JSR     PRBYTE
+                JSR     CROUT
+                LDA     RD80VID
+                JSR     PRBYTE
+                JSR     CROUT
+                PUTS    SCR_WDTH_TXT
+                LDA     SCR_WDTH
+                JSR     PRBYTE
+                JSR     CROUT
+                FIN
+
                 RTS
 
 ********************************
@@ -873,6 +886,7 @@ USRQUIT        DS    1
 BUFCHAR        DS    1
 USRCHAR        DS    1
 SCR_WDTH       DS    1
+SCR_WDTH_TXT   STR  "SCREEN WIDTH="
 
 PREFIXMSG   STR     "THE PREFIX IS "
 WARNING     STR     'WARNING'
