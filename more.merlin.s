@@ -85,8 +85,12 @@ KBD             EQU     $C000       ;KEYBOARD DATA AND STROBE
 CXROMOFF        EQU     $C006       ;SELECT SLOT ROMS
 CXROMON         EQU     $C007       ;SELECT INTERNAL ROM
 KBDSTRB         EQU     $C010       ;CLEAR KEYBOARD STROBE
+MIXED           EQU     $C01B       ;R7=1 MIXED, R7=0 FULL GR
+PAGE2           EQU     $C01C       ;R7-1 PAGE ACTIVE (OR AUX)
 ALTCHAR         EQU     $C01E       ;CHARACTER SET STATUS
 RD80VID         EQU     $C01F       ;<=128->40COL, >128->80COL
+PAGE2OFF        EQU     $C054       ;SEL PG1 (RW)
+PAGE2ON         EQU     $C055       ;SEL PG2 (RW)
 INVERT          EQU     $CEDD       ;INVERT CHARACTER ON SCREEN
 PICK            EQU     $CF01       ;PICK CHARACTER OFF SCREEN
 *
@@ -108,6 +112,10 @@ CLOSEPARMCNT    EQU     1
 *
 CR_CHAR         EQU     $0D         ;ASCII CARRIAGE RETURN
 CR_HIBIT        EQU     $8D         ;CARRIAGE RET WITH HIGH BIT SET
+RIGHT_ARROW     EQU     $15
+RIGHT_HIBIT     EQU     $95
+LEFT_ARROW      EQU     $08
+LEFT_HIBIT      EQU     $88
 *
 * CONSTANTS
 *
@@ -353,7 +361,7 @@ MAIN           CLD                  ;CLEAR DECIMAL FLG, AVOID CRASH
 GET_SCRN_WDTH   LDA     #%10000000      ;USE ALTCHARSET STATUS TO
                 BIT     ALTCHAR         ;SEE IF 80-COL CARD TURNED ON
                 BMI     :CARD_ACTIVE    ;BIT 7 ON = NEG & CARD ACTIVE
-                JMP     :FORTY_COLUMNS  ;INACTIVE CARD IS 40-COL
+                JMP     :FORTY_COLUMNS  ;INACTIVE = DEFLT 40-COL MODE
 :CARD_ACTIVE    LDA     #%10000000      ;SEE IF CARD IS IN 40/80 MODE
                 BIT     RD80VID         ;BIT 7 OFF = 0 OR >0 & 40-COL
                 BMI     :EIGHTY_COLUMNS ;BIT 7 ON = NEG & 80-COL MODE
@@ -610,6 +618,15 @@ DOWN1LINE   INC     SCRNLINE    ;KEEP TRACK OF LINE NUMBER
 
 ********************************
 *                              *
+* WRITE CHAR TO PAGE2          *
+* CLIPS TO SCREEN WIDTH        *
+*                              *
+********************************
+WRITECHAR2
+            RTS
+
+********************************
+*                              *
 * PRINT ASCII IN HEX           *
 *                              *
 ********************************
@@ -631,36 +648,38 @@ PRASCII        PHA
 *                              *
 ********************************
 
-STATBAR
-               DO    TRACE
-               PUTS  ENSTATB
-               FIN
+STATBAR     DO      TRACE
+            PUTS    ENSTATB
+            FIN
 
-               PUSHY
-               PUTS  BAR
-:LOOP          JSR   RDKEY      ;GET A KEY FROM THE USER
-               CMP   #" "       ;CHECK IF SPACE ENTERED
-               BNE   :CHKCR     ;IF NOT FORWARD TO NEXT CHECK
-               SET1  SCRNLINE   ;ADVANCE ONE PAGE, STORE 1
-               JMP   :ENDLOOP   ;PROCESSED SPACE SO DONE
-:CHKCR         CMP   #CR_HIBIT  ;CHECK FOR CARRIAGE RETURN
-               BNE   :CHKQUIT
-               SET23 SCRNLINE
-               JMP   :ENDLOOP
-:CHKQUIT       CMP   #"Q"       ;USER WANTS TO QUIT
-               BEQ   :QUITTING  ;NO RECOGNIZED INPUT
-               CMP   #"q"
-               BEQ   :QUITTING
-               JMP   :LOOP
-:QUITTING      SET1  USRQUIT
-:ENDLOOP       JSR   ERASEBAR
-               POPY
+            PUSHY
+            PUTS    BAR
+:LOOP       JSR     RDKEY           ;GET A KEY FROM THE USER
+            CMP     #" "            ;CHECK IF SPACE ENTERED
+            BNE     :CHKCR          ;IF NOT FORWARD TO NEXT CHECK
+            SET1    SCRNLINE        ;ADVANCE ONE PAGE, STORE 1
+            JMP     :ENDLOOP        ;PROCESSED SPACE SO DONE
+:CHKCR      CMP     #CR_HIBIT       ;CHECK FOR CARRIAGE RETURN
+            BNE     :CHKQUIT
+            COPY_B  SCRNLINE;#23
+            JMP     :ENDLOOP
+:CHKQUIT    CMP     #"Q"            ;USER WANTS TO QUIT
+            BEQ     :QUITTING       ;NO RECOGNIZED INPUT
+            CMP     #"q"
+            BEQ     :QUITTING
+            CMP     RIGHT_HIBIT
+            BNE     :ENDLOOP
+            JSR     PAGE_RIGHT
+            JMP     :LOOP
+:QUITTING   SET1    USRQUIT
+:ENDLOOP    JSR     ERASEBAR
+            POPY
 
-               DO    TRACE
-               PUTS  EXSTATB
-               FIN
+            DO      TRACE
+            PUTS    EXSTATB
+            FIN
 
-               RTS
+            RTS
 
 ********************************
 *                              *
@@ -669,27 +688,37 @@ STATBAR
 ********************************
 
 ERASEBAR
-               DO    TRACE
-               PUTS  ENERASEB
+               DO       TRACE
+               PUTS     ENERASEB
                FIN
 
                PUSHY
-               SET0  OURCH      ;RESET CURSOR TO BEG OF LINE
-               LDY   #0         ;INIT COUNTER FOR SPACES
-:LOOP          CPY   BAR        ;FIRST BYTE IS LENGTH
-               BEQ   :ENDLOOP   ;IF Y=LEN THEN DONE
-               LDA   #" "       ;LOAD SPACE
-               JSR   COUT       ;WRITE TO SCREEN
-               INY              ;MAKE PROGRESS
-               JMP   :LOOP      ;LOOP TO NEXT CHAR
-:ENDLOOP       SET0  OURCH      ;RESET CURSOR TO BEG OF LINE
+               COPY_B   OURCH;#0    ;CURSOR TO BEG OF LINE, 80-COL
+               COPY_B   CH;#0       ;CURSOR TO BEG OF LINE, 40-COL
+               LDY      #0          ;INIT COUNTER FOR SPACES
+:LOOP          CPY      BAR         ;FIRST BYTE IS LENGTH
+               BEQ      :ENDLOOP    ;IF Y=LEN THEN DONE
+               LDA      #" "        ;LOAD SPACE
+               JSR      COUT        ;WRITE TO SCREEN
+               INY                  ;MAKE PROGRESS
+               JMP      :LOOP       ;LOOP TO NEXT CHAR
+:ENDLOOP       COPY_B   OURCH;#0    ;RESET CURSOR TO BEG OF LINE
+               COPY_B   CH;#0       ;CURSOR TO BEG OF LINE, 40-COL
                POPY
 
-               DO    TRACE
-               PUTS  EXERASEB
+               DO       TRACE
+               PUTS     EXERASEB
                FIN
 
                RTS
+
+********************************
+*                              *
+* PAGE 2 ON                    *
+*                              *
+********************************
+PAGE_RIGHT  STA     PAGE2ON
+            RTS
 
 ********************************
 *                              *
@@ -867,105 +896,106 @@ ERRPROC
 *                              *
 ********************************
 
-INFOLINE       STR   "ENTER [?] FOR PROGRAM INFO AND HELP"
-INFO0          STR   "MORE - PAGES THROUGH TEXT FILE"
-INFO1          STR   "COPYRIGHT (C) 2024 BILL CHATFIELD"
-INFO2          STR   "DISTRIBUTED UNDER THE GPL VERSION 3"
-INFO3          STR   "https://github.com/gungwald/prodos-more"
-INFO4          STR   "PRESS RETURN TO QUIT"
-FILEPROMPT     STR   "FILE:"
-ERRTXT         STR   "ERROR:"
-FILENAME       DS    $FF
-PREFIX         DS    64
-ERRCODE        DS    1
-SCRNLINE       DS    1
-LINEIDX        DS    1
-CHAR           DS    1
-BAR            STR   '[RET] LINE  [SPC] PAGE  [Q]UIT'
-USRQUIT        DS    1
-BUFCHAR        DS    1
-USRCHAR        DS    1
-SCR_WDTH       DS    1
-SCR_WDTH_TXT   STR  "SCREEN WIDTH="
+INFOLINE        STR     "ENTER [?] FOR PROGRAM INFO AND HELP"
+INFO0           STR     "MORE - PAGES THROUGH TEXT FILE"
+INFO1           STR     "COPYRIGHT (C) 2024 BILL CHATFIELD"
+INFO2           STR     "DISTRIBUTED UNDER THE GPL VERSION 3"
+INFO3           STR     "https://github.com/gungwald/prodos-more"
+INFO4           STR     "PRESS RETURN TO QUIT"
+FILEPROMPT      STR     "FILE:"
+ERRTXT          STR     "ERROR:"
+FILENAME        DS      $FF
+PREFIX          DS      64
+ERRCODE         DS      1
+SCRNLINE        DS      1
+LINEIDX         DS      1
+CHAR            DS      1
+BAR             STR     '[RET] LINE  [SPC] PAGE  [Q]UIT'
+USRQUIT         DS      1
+BUFCHAR         DS      1
+USRCHAR         DS      1
+SCR_WDTH        DS      1
+SCR_WDTH_TXT    STR     "SCREEN WIDTH="
+TEXTPAGE        DS      1
 
-PREFIXMSG   STR     "THE PREFIX IS "
-WARNING     STR     'WARNING'
-NOPREFIXMSG STR     ": NO PREFIX IS SET. YOU MUST ENTER THE FULL PATH TO THE FILE."
-GETPRFXERRMSG STR   "CANNOT GET PREFIX"
-OERRMSG     STR     "CANNOT OPEN "
-CERRMSG     STR     "CANNOT CLOSE "
-RBERRMSG    STR     "CANNOT CREATE READ BUFFER"
-OBERRMSG    STR     "CANNOT CREATE FILE BUFFER"
+PREFIXMSG       STR     "THE PREFIX IS "
+WARNING         STR     'WARNING'
+NOPREFIXMSG     STR     ": NO PREFIX IS SET. YOU MUST ENTER THE FULL PATH TO THE FILE."
+GETPRFXERRMSG   STR     "CANNOT GET PREFIX"
+OERRMSG         STR     "CANNOT OPEN "
+CERRMSG         STR     "CANNOT CLOSE "
+RBERRMSG        STR     "CANNOT CREATE READ BUFFER"
+OBERRMSG        STR     "CANNOT CREATE FILE BUFFER"
 
-E00MSG      STR     "NO ERROR"
-E01MSG      STR     "BAD SYSTEM CALL NUMBER"
-E04MSG      STR     "BAD SYSTEM CALL PARAMETER COUNT"
-E25MSG      STR     "INTERRUPT TABLE FULL"
-E27MSG      STR     "I/O ERROR"
-E28MSG      STR     "NO DEVICE CONNECTED"
-E2BMSG      STR     "DISK WRITE PROTECTED"
-E2EMSG      STR     "DISK SWITCHED"
-E40MSG      STR     "INVALID PATHNAME"
-E42MSG      STR     "MAXIMUM NUMBER OF FILES OPEN"
-E43MSG      STR     "INVALID REFERENCE NUMBER"
-E44MSG      STR     "DIRECTORY NOT FOUND"
-E45MSG      STR     "VOLUME NOT FOUND"
-E46MSG      STR     "FILE NOT FOUND"
-E47MSG      STR     "DUPLICATE FILENAME"
-E48MSG      STR     "VOLUME FULL"
-E49MSG      STR     "VOLUME DIRECTORY FULL"
-E4AMSG      STR     "INCOMPATIBLE FILE FORMAT OR PRODOS DIRECTORY"
-E4BMSG      STR     "UNSUPPORTED STORAGE TYPE"
-E4CMSG      STR     "END OF FILE ENCOUNTERED"
-E4DMSG      STR     "POSITION OUT OF RANGE"
-E4EMSG      STR     "FILE ACCESS ERROR OR FILE LOCKED"
-E50MSG      STR     "FILE IS OPEN"
-E51MSG      STR     "DIRECTORY STRUCTURE DAMAGED"
-E52MSG      STR     "NOT A PRODOS VOLUME"
-E53MSG      STR     "INVALID SYSTEM CALL PARAMETER"
-E55MSG      STR     "VOLUME CONTROL BLOCK TABLE FULL"
-E56MSG      STR     "BAD BUFFER ADDRESS"
-E57MSG      STR     "DUPLICATE VOLUME"
-E5AMSG      STR     "FILE STRUCTURE DAMAGED"
-E_UNK_MSG   STR     "UNKNOWN ERROR CODE"
+E00MSG          STR     "NO ERROR"
+E01MSG          STR     "BAD SYSTEM CALL NUMBER"
+E04MSG          STR     "BAD SYSTEM CALL PARAMETER COUNT"
+E25MSG          STR     "INTERRUPT TABLE FULL"
+E27MSG          STR     "I/O ERROR"
+E28MSG          STR     "NO DEVICE CONNECTED"
+E2BMSG          STR     "DISK WRITE PROTECTED"
+E2EMSG          STR     "DISK SWITCHED"
+E40MSG          STR     "INVALID PATHNAME"
+E42MSG          STR     "MAXIMUM NUMBER OF FILES OPEN"
+E43MSG          STR     "INVALID REFERENCE NUMBER"
+E44MSG          STR     "DIRECTORY NOT FOUND"
+E45MSG          STR     "VOLUME NOT FOUND"
+E46MSG          STR     "FILE NOT FOUND"
+E47MSG          STR     "DUPLICATE FILENAME"
+E48MSG          STR     "VOLUME FULL"
+E49MSG          STR     "VOLUME DIRECTORY FULL"
+E4AMSG          STR     "INCOMPATIBLE FILE FORMAT OR PRODOS DIRECTORY"
+E4BMSG          STR     "UNSUPPORTED STORAGE TYPE"
+E4CMSG          STR     "END OF FILE ENCOUNTERED"
+E4DMSG          STR     "POSITION OUT OF RANGE"
+E4EMSG          STR     "FILE ACCESS ERROR OR FILE LOCKED"
+E50MSG          STR     "FILE IS OPEN"
+E51MSG          STR     "DIRECTORY STRUCTURE DAMAGED"
+E52MSG          STR     "NOT A PRODOS VOLUME"
+E53MSG          STR     "INVALID SYSTEM CALL PARAMETER"
+E55MSG          STR     "VOLUME CONTROL BLOCK TABLE FULL"
+E56MSG          STR     "BAD BUFFER ADDRESS"
+E57MSG          STR     "DUPLICATE VOLUME"
+E5AMSG          STR     "FILE STRUCTURE DAMAGED"
+E_UNK_MSG       STR     "UNKNOWN ERROR CODE"
 
-ENVIEW         STR   'ENTERING VIEWFILE'
-EXVIEW         STR   'EXITING VIEWFILE'
-EXWRITEBUF     STR   'EXITING WRITEBUF'
-ENSTATB        STR   'ENTERING STATUSBAR'
-EXSTATB        STR   'EXITING STATUSBAR'
-ENERASEB       STR   'ENTERING ERASEBAR'
-EXERASEB       STR   'EXITING ERASEBAR'
+ENVIEW          STR     'ENTERING VIEWFILE'
+EXVIEW          STR     'EXITING VIEWFILE'
+EXWRITEBUF      STR     'EXITING WRITEBUF'
+ENSTATB         STR     'ENTERING STATUSBAR'
+EXSTATB         STR     'EXITING STATUSBAR'
+ENERASEB        STR     'ENTERING ERASEBAR'
+EXERASEB        STR     'EXITING ERASEBAR'
 *
 * GET_PREFIX PARAMETERS
 *
-GETPRFXPARMS   DB    #GETPRFXPARMCNT
-PREFIXADDR     DA    PREFIX
+GETPRFXPARMS    DB      #GETPRFXPARMCNT
+PREFIXADDR      DA      PREFIX
 *
 * OPEN PARAMETERS
 *
-OPENPARMS      DB    #OPENPARMCNT
-               DA    FILENAME
-OBUFADDR       DS    2
-OPENFNUM       DS    1
+OPENPARMS       DB      #OPENPARMCNT
+                DA      FILENAME
+OBUFADDR        DS      2
+OPENFNUM        DS      1
 *
 * READ PARAMETERS
 *
-READPARMS      DB    #READPARMCNT
-READFNUM       DS    1
-RBADDR         DS    2
-REQCNT         DW    BUFSIZE
-READCNT        DS    2
+READPARMS       DB      #READPARMCNT
+READFNUM        DS      1
+RBADDR          DS      2
+REQCNT          DW      BUFSIZE
+READCNT         DS      2
 *
 * CLOSE PARAMETERS
 *
-CLOSEPARMS     DB    #CLOSEPARMCNT
-CLOSFNUM       DS    1
+CLOSEPARMS      DB      #CLOSEPARMCNT
+CLOSFNUM        DS      1
 *
 * BUFFERS
 *
 * CONSUME ALL BYTES UP TO THE NEXT PAGE BOUNDRY
-FILLER DS \,$00
+*FILLER DS \,$00
 * MUST START ON PAGE BOUNDRY
 *OPENBUF DS 1024
 *READBUF DS BUFSIZE
