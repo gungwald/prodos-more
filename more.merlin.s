@@ -21,7 +21,7 @@
 * $D000 - $F7FF	BASIC ROM (can be bankswitched later models)
 * $F800 - $FFFF	Machine Language Monitor ROM (also can be bankswitched)
 *
-* Branching
+* Branching - I can never remember this scheisse
 *
 * CMP,CPX,CPY ->
 * Condition 	        N 	Z 	C
@@ -162,7 +162,7 @@ POPY           MAC
 *                              *
 ********************************
 
-CPIN           MAC
+COPYIN         MAC
                PUSHY            ;SAVE Y
                STX   ]1         ;COPY LENGTH TO FIRST BYTE OF ]1
                LDY   #0         ;INIT Y TO ZERO
@@ -205,17 +205,17 @@ ENDLOOP        POPY
 *                              *
 ********************************
 
-SET1           MAC
+STORE1         MAC
                LDA   #1
                STA   ]1
                <<<
 
-SET0           MAC
+STORE0         MAC
                LDA   #0
                STA   ]1
                <<<
 
-SET23          MAC
+STORE23        MAC
                LDA   #23
                STA   ]1
                <<<
@@ -230,7 +230,7 @@ SET23          MAC
 *                              *
 ********************************
 
-COPY_B      MAC
+COPYB       MAC
             LDA     ]2
             STA     ]1
             <<<
@@ -242,7 +242,7 @@ COPY_B      MAC
 ********************************
 
 MAIN           CLD                  ;CLEAR DECIMAL FLG, AVOID CRASH
-               SET0  USRQUIT        ;INITIALIZE TO "NO"
+               STORE0 USRQUIT        ;INITIALIZE TO "NO"
                JSR   GET_SCRN_WDTH
 *
 * GET PREFIX TO SEE IF IT IS SET
@@ -279,7 +279,7 @@ MAIN           CLD                  ;CLEAR DECIMAL FLG, AVOID CRASH
                BNE   :CONT1
                JSR   HELPINFO
                JMP   :ASKFILE
-:CONT1         CPIN  FILENAME   ;COPY "IN" BUF TO FILENAME
+:CONT1         COPYIN FILENAME   ;COPY "IN" BUF TO FILENAME
 
                DO    TRACE
                JSR   PRSTRBYTES
@@ -537,8 +537,8 @@ VIEWFILE
             PUTS  ENVIEW
             FIN
             
-            COPY_B  SCRNLINE;#1 ;INIT SCREEN LINE NUMBER
-            COPY_B  LINEIDX;#1  ;POSITION IN LINE
+            COPYB   SCRNLINE;#1 ;INIT SCREEN LINE NUMBER
+            COPYB   LINEIDX;#1  ;POSITION IN LINE
 :LOOP       JSR     PRODOS_MLI  ;CALL PRODOS TO READ FILE
             DB      READ        ;SPECIFY PRODOS READ COMMAND
             DA      READPARMS   ;READ PARAMETERS
@@ -611,8 +611,8 @@ WRITECHAR   STA     CHAR        ;DON'T LOOSE THE CHARACTER
 *                              *
 ********************************
 DOWN1LINE   INC     SCRNLINE    ;KEEP TRACK OF LINE NUMBER
-            COPY_B  LINEIDX;#1  ;RESET TO BEGINNING OF LINE
-            ;COPY_B  OURCH;#0
+            STORE1  LINEIDX     ;RESET TO BEGINNING OF LINE
+            ;COPYB   OURCH;#0
             JSR     CROUT       ;LINE DOWN & SCROLL IF NEEDED
             RTS
 
@@ -648,38 +648,36 @@ PRASCII        PHA
 *                              *
 ********************************
 
-STATBAR     DO      TRACE
-            PUTS    ENSTATB
-            FIN
+STATBAR
+                DO      TRACE
+                PUTS    ENSTATB
+                FIN
 
-            PUSHY
-            PUTS    BAR
-:LOOP       JSR     RDKEY           ;GET A KEY FROM THE USER
-            CMP     #" "            ;CHECK IF SPACE ENTERED
-            BNE     :CHKCR          ;IF NOT FORWARD TO NEXT CHECK
-            SET1    SCRNLINE        ;ADVANCE ONE PAGE, STORE 1
-            JMP     :ENDLOOP        ;PROCESSED SPACE SO DONE
-:CHKCR      CMP     #CR_HIBIT       ;CHECK FOR CARRIAGE RETURN
-            BNE     :CHKQUIT
-            COPY_B  SCRNLINE;#23
-            JMP     :ENDLOOP
-:CHKQUIT    CMP     #"Q"            ;USER WANTS TO QUIT
-            BEQ     :QUITTING       ;NO RECOGNIZED INPUT
-            CMP     #"q"
-            BEQ     :QUITTING
-            CMP     RIGHT_HIBIT
-            BNE     :ENDLOOP
-            JSR     PAGE_RIGHT
-            JMP     :LOOP
-:QUITTING   SET1    USRQUIT
-:ENDLOOP    JSR     ERASEBAR
-            POPY
+                PUSHY
+                PUTS    BAR
+:LOOP           JSR     RDKEY      ;GET A KEY FROM THE USER
+                CMP     #" "       ;CHECK IF SPACE ENTERED
+                BNE     :CHKCR     ;IF NOT FORWARD TO NEXT CHECK
+                STORE1  SCRNLINE   ;ADVANCE ONE PAGE, STORE 1
+                JMP     :ENDLOOP   ;PROCESSED SPACE SO DONE
+:CHKCR          CMP     #CR_HIBIT  ;CHECK FOR CARRIAGE RETURN
+                BNE     :CHKQUIT
+                STORE23 SCRNLINE
+                JMP     :ENDLOOP
+:CHKQUIT        CMP     #"Q"       ;USER WANTS TO QUIT
+                BEQ     :QUITTING  ;NO RECOGNIZED INPUT
+                CMP     #"q"
+                BEQ     :QUITTING
+                JMP     :LOOP
+:QUITTING       STORE1  USRQUIT
+:ENDLOOP        JSR     ERASEBAR
+                POPY
 
-            DO      TRACE
-            PUTS    EXSTATB
-            FIN
+                DO      TRACE
+                PUTS    EXSTATB
+                FIN
 
-            RTS
+                RTS
 
 ********************************
 *                              *
@@ -693,17 +691,15 @@ ERASEBAR
                FIN
 
                PUSHY
-               COPY_B   OURCH;#0    ;CURSOR TO BEG OF LINE, 80-COL
-               COPY_B   CH;#0       ;CURSOR TO BEG OF LINE, 40-COL
-               LDY      #0          ;INIT COUNTER FOR SPACES
-:LOOP          CPY      BAR         ;FIRST BYTE IS LENGTH
-               BEQ      :ENDLOOP    ;IF Y=LEN THEN DONE
-               LDA      #" "        ;LOAD SPACE
-               JSR      COUT        ;WRITE TO SCREEN
-               INY                  ;MAKE PROGRESS
-               JMP      :LOOP       ;LOOP TO NEXT CHAR
-:ENDLOOP       COPY_B   OURCH;#0    ;RESET CURSOR TO BEG OF LINE
-               COPY_B   CH;#0       ;CURSOR TO BEG OF LINE, 40-COL
+               STORE0 OURCH      ;RESET CURSOR TO BEG OF LINE
+               LDY   #0         ;INIT COUNTER FOR SPACES
+:LOOP          CPY   BAR        ;FIRST BYTE IS LENGTH
+               BEQ   :ENDLOOP   ;IF Y=LEN THEN DONE
+               LDA   #" "       ;LOAD SPACE
+               JSR   COUT       ;WRITE TO SCREEN
+               INY              ;MAKE PROGRESS
+               JMP   :LOOP      ;LOOP TO NEXT CHAR
+:ENDLOOP       STORE0 OURCH      ;RESET CURSOR TO BEG OF LINE
                POPY
 
                DO       TRACE
